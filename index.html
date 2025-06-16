@@ -147,7 +147,12 @@
     const titleInput = document.getElementById('task-input');
     const detailsInput = document.getElementById('details-input');
     if (titleInput.value.trim()) {
-      tasks.push({ text: titleInput.value.trim(), details: detailsInput.value.trim(), x: 20, y: 20 });
+      tasks.push({
+        text: titleInput.value.trim(),
+        details: detailsInput.value.trim(),
+        x: 50 + tasks.length * 10,
+        y: 80 + tasks.length * 10
+      });
       titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
   };
@@ -158,4 +163,3 @@
 </script>
 </body>
 </html>
-
