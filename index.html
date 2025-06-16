@@ -2,167 +2,140 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>任务管理PWA</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 10px;
-      user-select: none;
+    body, html {
+      margin: 0; padding: 0; overflow: hidden; font-family: sans-serif;
+    }
+    #canvas {
+      width: 300vw; height: 200vh;
+      position: relative; background-color: #f0f0f0;
       touch-action: none;
       overflow: hidden;
-      background-color: #f9f9f9;
-    }
-    #tasks {
-      position: relative;
-      width: 100%;
-      height: 85vh;
-      border: 1px dashed #ddd;
     }
     .task {
-      position: absolute;
-      padding: 6px 8px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      font-size: 12px;
-      background-color: #fff;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      word-wrap: break-word;
-      max-width: 150px;
-      cursor: move;
-      touch-action: none;
+      position: absolute; padding: 10px; border: 1px solid #ccc;
+      border-radius: 8px; background-color: #fff; font-size: 12px;
+      width: 80px; height: 160px; word-wrap: break-word;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1); touch-action: none;
       user-select: none;
     }
     .delete-btn {
-      position: absolute;
-      top: -6px;
-      right: -6px;
-      background: #ff4d4f;
-      color: white;
-      border: none;
-      border-radius: 50%;
-      width: 16px;
-      height: 16px;
-      line-height: 14px;
-      cursor: pointer;
-      font-size: 12px;
-      z-index: 1;
-    }
-    input, button {
-      font-size: 12px;
-      padding: 6px;
-      margin: 5px 0;
+      position: absolute; top: -8px; right: -8px;
+      background-color: red; color: white; border: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      cursor: pointer; font-size: 12px;
     }
     #undo-btn {
-      margin-top: 5px;
-      display: none;
+      position: fixed; top: 10px; right: 10px;
+      display: none; padding: 5px 10px; font-size: 12px;
+      z-index: 100; background-color: #007bff;
+      color: white; border: none; border-radius: 4px;
     }
+    #controls {
+      position: fixed; top: 10px; left: 10px; z-index: 100;
+      display: flex; flex-direction: column;
+    }
+    input, button { margin: 2px; padding: 5px; font-size: 12px; }
   </style>
 </head>
 <body>
-  <h3>任务管理PWA</h3>
+
+<button id="undo-btn">撤销删除</button>
+<div id="controls">
   <input type="text" id="task-input" placeholder="新任务内容">
   <button id="add-btn">添加任务</button>
-  <button id="undo-btn">撤销删除</button>
-  <div id="tasks"></div>
+</div>
+<div id="canvas"></div>
 
-  <script>
-    let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
-    let lastDeletedTask = null;
-    const container = document.getElementById('tasks');
-    const undoBtn = document.getElementById('undo-btn');
+<script>
+  let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+  let deletedTask = null;
+  const canvas = document.getElementById('canvas');
+  const undoBtn = document.getElementById('undo-btn');
 
-    function saveTasks(){
-      localStorage.setItem('tasks', JSON.stringify(tasks));
-    }
+  function saveTasks() {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+  }
 
-    function renderTasks(){
-      container.innerHTML = '';
-      tasks.forEach((task, index)=>{
-        const el = document.createElement('div');
-        el.className = 'task';
-        el.innerText = task.text;
-        el.style.left = task.x + 'px';
-        el.style.top = task.y + 'px';
+  function renderTasks() {
+    canvas.innerHTML = '';
+    tasks.forEach((task, idx) => {
+      const el = document.createElement('div');
+      el.className = 'task';
+      el.style.left = task.x + 'px';
+      el.style.top = task.y + 'px';
+      el.textContent = task.text;
 
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.innerText = '×';
-        delBtn.onclick = (e)=>{
-          e.stopPropagation();
-          lastDeletedTask = {...task, index};
-          tasks.splice(index,1);
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn'; delBtn.textContent = '×';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deletedTask = {...task, idx};
+        tasks.splice(idx, 1);
+        saveTasks(); renderTasks();
+        undoBtn.style.display = 'block';
+      };
+      el.appendChild(delBtn);
+
+      let offsetX, offsetY, dragging;
+      el.onpointerdown = e => {
+        dragging = el; el.setPointerCapture(e.pointerId);
+        offsetX = e.clientX - el.offsetLeft;
+        offsetY = e.clientY - el.offsetTop;
+      };
+      el.onpointermove = e => {
+        if (dragging !== el) return;
+        el.style.left = (e.clientX - offsetX) + 'px';
+        el.style.top = (e.clientY - offsetY) + 'px';
+      };
+      el.onpointerup = el.onpointercancel = () => {
+        if (dragging === el) {
+          dragging = null;
+          task.x = el.offsetLeft; task.y = el.offsetTop;
           saveTasks();
-          renderTasks();
-          undoBtn.style.display = 'inline-block';
-        };
-        el.appendChild(delBtn);
+        }
+      };
+      canvas.appendChild(el);
+    });
+  }
 
-        let offsetX, offsetY, dragging = false;
-        el.addEventListener('pointerdown', (e)=>{
-          dragging = true;
-          offsetX = e.clientX - el.offsetLeft;
-          offsetY = e.clientY - el.offsetTop;
-          el.setPointerCapture(e.pointerId);
-        });
-        el.addEventListener('pointermove', (e)=>{
-          if(dragging){
-            e.preventDefault();
-            let x = e.clientX - offsetX;
-            let y = e.clientY - offsetY;
-
-            const maxX = container.clientWidth - el.offsetWidth;
-            const maxY = container.clientHeight - el.offsetHeight;
-            x = Math.min(maxX, Math.max(0, x));
-            y = Math.min(maxY, Math.max(0, y));
-
-            el.style.left = x + 'px';
-            el.style.top = y + 'px';
-          }
-        });
-        el.addEventListener('pointerup', (e)=>{
-          if(dragging){
-            dragging = false;
-            task.x = el.offsetLeft;
-            task.y = el.offsetTop;
-            saveTasks();
-          }
-        });
-        el.addEventListener('pointercancel', ()=>{
-          dragging = false;
-        });
-
-        container.appendChild(el);
-      });
+  undoBtn.onclick = () => {
+    if (deletedTask) {
+      tasks.splice(deletedTask.idx, 0, deletedTask);
+      saveTasks(); renderTasks();
+      undoBtn.style.display = 'none';
+      deletedTask = null;
     }
+  };
 
-    document.getElementById('add-btn').onclick = ()=>{
-      const input = document.getElementById('task-input');
-      const text = input.value.trim();
-      if(text){
-        tasks.push({text, x: 10, y: 10});
-        input.value='';
-        saveTasks();
-        renderTasks();
-      }
-    };
-
-    undoBtn.onclick = ()=>{
-      if(lastDeletedTask){
-        tasks.splice(lastDeletedTask.index, 0, lastDeletedTask);
-        saveTasks();
-        renderTasks();
-        lastDeletedTask = null;
-        undoBtn.style.display = 'none';
-      }
-    };
-
-    renderTasks();
-
-    if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('sw.js');
+  document.getElementById('add-btn').onclick = () => {
+    const input = document.getElementById('task-input');
+    if (input.value.trim()) {
+      tasks.push({ text: input.value.trim(), x: 20, y: 20 });
+      input.value = ''; saveTasks(); renderTasks();
     }
-  </script>
+  };
+
+  let canvasOffset = {x:0,y:0}, canvasDrag=false, startDrag;
+  canvas.onpointerdown = e => {
+    if (e.target !== canvas) return;
+    canvasDrag = true;
+    startDrag = {x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y};
+  };
+  canvas.onpointermove = e => {
+    if (!canvasDrag) return;
+    canvasOffset.x = e.clientX - startDrag.x;
+    canvasOffset.y = e.clientY - startDrag.y;
+    canvas.style.transform = `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`;
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => canvasDrag = false;
+
+  renderTasks();
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
 </body>
 </html>
