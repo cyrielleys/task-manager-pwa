@@ -12,7 +12,6 @@
     #canvas {
       width: 300vw; height: 200vh;
       position: relative; background-color: #f0f0f0;
-      touch-action: none;
       overflow: hidden;
       cursor: grab;
     }
@@ -150,17 +149,6 @@
     }
   };
 
-  document.getElementById('export-btn').onclick = () => {
-    navigator.clipboard.writeText(JSON.stringify(tasks)).then(() => alert('任务已导出到剪贴板！'));
-  };
-
-  document.getElementById('import-btn').onclick = async () => {
-    const data = await navigator.clipboard.readText();
-    tasks = JSON.parse(data);
-    saveTasks(); renderTasks();
-    alert('任务已从剪贴板导入！');
-  };
-
   document.getElementById('add-btn').onclick = () => {
     const titleInput = document.getElementById('task-input');
     const detailsInput = document.getElementById('details-input');
@@ -168,8 +156,8 @@
       tasks.push({
         text: titleInput.value.trim(),
         details: detailsInput.value.trim(),
-        x: 50 + tasks.length * 10,
-        y: 100 + tasks.length * 10
+        x: 100 + tasks.length * 10,
+        y: 150 + tasks.length * 10
       });
       titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
