@@ -3,249 +3,416 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>任务管理 PWA 示例</title>
+  <title>任务管理</title>
   <style>
-    /* 基础样式和布局 */
-    body {
-      margin: 0;
+    /* 页面基础样式 */
+    body, html {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden; /* 禁用默认滚动，使用自定义拖拽 */
       font-family: sans-serif;
-      background: #fafafa;
+      background: #f0f0f0;
     }
-    .controls {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 8px;
-      padding: 8px;
-      background: #f8f8f8;
-      border-bottom: 1px solid #ccc;
-    }
-    .controls input {
-      flex: 1 1 auto;
-      min-width: 120px;
-      padding: 6px;
-      font-size: 16px;
-    }
-    .controls button {
-      padding: 6px 12px;
-      font-size: 16px;
-    }
-
-    /* 画布区域样式 */
-    #canvas {
+    /* 视口容器，固定全屏 */
+    #viewport {
       position: relative;
-      width: 100%;
-      height: calc(100vh - 50px); /* 让画布填满剩余空间，高度可根据需要调整 */
-      overflow: auto;
-      /* 棋盘格背景：淡灰色交替方格 */
-      background-color: #f0f0f0;
-      background-image: 
-        linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc),
-        linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc);
-      background-size: 20px 20px;
-      background-position: 0 0, 10px 10px;  /* 第二层偏移10px，形成棋盘格:contentReference[oaicite:21]{index=21} */
+      width: 100vw; height: 100vh;
+      overflow: hidden;
+      touch-action: none; /* 禁用浏览器默认拖拽行为，使用自定义 */
+      cursor: grab;
     }
-
+    #viewport:active { cursor: grabbing; }
+    /* 画布区域，绝对定位在视口内 */
+    #canvas {
+      position: absolute;
+      width: 3000px;
+      height: 2000px;
+      background: repeating-conic-gradient(#fff 0deg 90deg, #ccc 0deg 180deg);
+      background-size: 33vw 33vw;
+      /* 棋盘格背景：灰(#ccc)/白 交错的大方格 */
+    }
     /* 任务卡片样式 */
     .task {
       position: absolute;
       min-width: 150px;
       max-width: 300px;
-      border: 1px solid #aaa;
-      border-radius: 4px;
       background: #fff;
+      border: 1px solid #999;
+      border-radius: 4px;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
       padding: 8px;
-      box-shadow: 1px 1px 6px rgba(0,0,0,0.1);
-      box-sizing: border-box;
     }
-    .task.selected {
-      border-color: #f00;  /* （可选）选中任务时高亮边框 */
+    .task h3 {
+      margin: 0; font-size: 16px;
+      cursor: move; /* 提示可拖动 */
+      user-select: none;
     }
-    .task-title {
-      font-weight: bold;
-      font-size: 16px;
-      margin-bottom: 4px;
+    .task .controls {
+      margin-top: 4px;
+      text-align: right;
     }
-    .task-note {
+    .task .controls button {
+      margin-left: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .task .note {
+      margin: 4px 0;
+      padding: 4px;
+      background: #f9f9f9;
+      border: 1px dashed #ccc;
       font-size: 14px;
-      line-height: 1.4;
-      display: none; /* 默认备注隐藏，按需展开 */
+      display: none; /* 默认隐藏备注 */
+      white-space: pre-wrap; /* 保留换行 */
     }
-    .task.expanded .task-note {
-      display: block;
+    /* 顶部工具栏 */
+    #toolbar {
+      position: absolute;
+      top: 8px; left: 8px;
+      background: rgba(255,255,255,0.8);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      user-select: none;
+    }
+    #toolbar button {
+      margin-right: 8px;
+      cursor: pointer;
+    }
+    #toolbar input[type=file] {
+      display: none;
     }
   </style>
 </head>
 <body>
-
-  <!-- 控制栏：包含输入字段和按钮 -->
-  <div class="controls">
-    <input id="titleInput" type="text" placeholder="新任务内容" />
-    <input id="noteInput" type="text" placeholder="新备注内容（可选）" />
-    <button id="addBtn">添加任务</button>
-    <!-- 导出和导入按钮 -->
-    <button id="exportBtn">导出</button>
-    <button id="importBtn">导入</button>
+  <!-- 视口容器 -->
+  <div id="viewport">
+    <!-- 画布区域 -->
+    <div id="canvas"></div>
+    <!-- 工具栏：添加任务、撤销删除、导入导出 -->
+    <div id="toolbar">
+      <button id="addBtn">添加任务</button>
+      <button id="undoBtn">撤销删除</button>
+      <button id="exportBtn">导出</button>
+      <button id="importBtn">导入</button>
+      <input id="fileInput" type="file" accept=".json" />
+    </div>
   </div>
 
-  <!-- 画布区域，包含任务元素 -->
-  <div id="canvas"></div>
-
   <script>
-    // 任务数据列表
-    let tasks = [];
-
-    // 从 localStorage 恢复已有任务（如果有）
-    const saved = localStorage.getItem('tasksData');
-    if (saved) {
-      try {
-        tasks = JSON.parse(saved);
-      } catch (e) {
-        console.warn('本地存储的任务数据解析失败，将忽略。');
-        tasks = [];
-      }
-    }
-
-    // 渲染任务列表到界面
+    // 获取元素
+    const viewport = document.getElementById('viewport');
     const canvas = document.getElementById('canvas');
-    function renderAllTasks() {
-      canvas.innerHTML = '';  // 清空画布
-      tasks.forEach(task => {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'task' + (task.expanded ? ' expanded' : '');
-        taskEl.style.left = task.x + 'px';
-        taskEl.style.top = task.y + 'px';
-        // 设置内容
-        const titleEl = document.createElement('div');
-        titleEl.className = 'task-title';
-        titleEl.textContent = task.title;
-        const noteEl = document.createElement('div');
-        noteEl.className = 'task-note';
-        noteEl.textContent = task.note;
-        taskEl.appendChild(titleEl);
-        taskEl.appendChild(noteEl);
-        // 点击任务切换展开/折叠备注
-        taskEl.addEventListener('click', () => {
-          task.expanded = !task.expanded;
-          taskEl.classList.toggle('expanded', task.expanded);
-          // 更新存储中的展开状态
-          saveTasks();
-        });
-        canvas.appendChild(taskEl);
-      });
+    const addBtn = document.getElementById('addBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
+
+    // 数据结构：任务列表数组
+    let tasksData = [];
+    let lastDeletedTask = null; // 保存最近删除的任务用于撤销
+
+    // 生成唯一ID的辅助函数
+    function generateId() {
+      return 'task-' + Date.now() + '-' + Math.floor(Math.random()*1000);
     }
 
-    // 保存任务列表到 localStorage
-    function saveTasks() {
-      localStorage.setItem('tasksData', JSON.stringify(tasks));
-    }
-
-    // 初始化渲染已有任务
-    renderAllTasks();
-
-    // “添加任务”按钮逻辑
-    document.getElementById('addBtn').addEventListener('click', () => {
-      const titleInput = document.getElementById('titleInput');
-      const noteInput = document.getElementById('noteInput');
-      const title = titleInput.value.trim();
-      const note = noteInput.value.trim();
-      if (title === '') {
-        alert('任务标题不能为空！');
-        return;
-      }
-      // 设置默认位置 (例如在左上角依次向下排列)
-      const x = 10;
-      const y = tasks.length * 60 + 10;  // 简单计算垂直位置错开
-      const newTask = { title, note, x, y, expanded: false };
-      tasks.push(newTask);
-      saveTasks();
-      // 渲染新任务元素
+    // 创建任务DOM元素的函数
+    function createTaskElement(task) {
       const taskEl = document.createElement('div');
       taskEl.className = 'task';
-      taskEl.style.left = x + 'px';
-      taskEl.style.top = y + 'px';
-      const titleEl = document.createElement('div');
-      titleEl.className = 'task-title';
-      titleEl.textContent = title;
-      const noteEl = document.createElement('div');
-      noteEl.className = 'task-note';
-      noteEl.textContent = note;
-      taskEl.appendChild(titleEl);
-      taskEl.appendChild(noteEl);
-      taskEl.addEventListener('click', () => {
-        newTask.expanded = !newTask.expanded;
-        taskEl.classList.toggle('expanded', newTask.expanded);
-        saveTasks();
+      taskEl.setAttribute('data-id', task.id);
+      taskEl.style.left = task.x + 'px';
+      taskEl.style.top = task.y + 'px';
+      taskEl.innerHTML = `
+        <h3>${task.title}</h3>
+        <div class="note">${task.note || ''}</div>
+        <div class="controls">
+          <button class="toggle-btn">${task.expanded ? '收起' : '展开'}</button>
+          <button class="delete-btn">删除</button>
+        </div>
+      `;
+      // 设置备注初始可见性
+      const noteEl = taskEl.querySelector('.note');
+      if (task.expanded) {
+        noteEl.style.display = 'block';
+      }
+      // 事件：展开/收起 按钮
+      const toggleBtn = taskEl.querySelector('.toggle-btn');
+      toggleBtn.addEventListener('click', () => {
+        const showing = noteEl.style.display === 'block';
+        noteEl.style.display = showing ? 'none' : 'block';
+        toggleBtn.textContent = showing ? '展开' : '收起';
+        // 更新数据中的状态
+        const t = tasksData.find(t => t.id === task.id);
+        if (t) t.expanded = !showing;
       });
+      // 事件：删除 按钮
+      const deleteBtn = taskEl.querySelector('.delete-btn');
+      deleteBtn.addEventListener('click', () => {
+        // 从DOM移除
+        canvas.removeChild(taskEl);
+        // 从数据中移除并保存到lastDeleted以便撤销
+        const idx = tasksData.findIndex(t => t.id === task.id);
+        if (idx !== -1) {
+          lastDeletedTask = tasksData[idx];
+          tasksData.splice(idx, 1);
+        }
+      });
+      // 任务拖拽事件
+      // 指针按下：准备拖动任务
+      taskEl.addEventListener('pointerdown', (e) => {
+        // 仅当按在标题区域或任务空白处拖动，点击按钮则不拖动
+        if (e.target.tagName.toLowerCase() === 'button') {
+          return; // 如果点击在按钮上，忽略拖动
+        }
+        e.stopPropagation(); // 防止触发画布拖拽
+        taskEl.setPointerCapture(e.pointerId);
+        draggingTask = taskEl;
+        dragOffsetX = e.clientX;
+        dragOffsetY = e.clientY;
+        // 当前任务初始位置
+        initialTaskX = taskEl.offsetLeft;
+        initialTaskY = taskEl.offsetTop;
+      });
+      taskEl.addEventListener('pointermove', (e) => {
+        if (!draggingTask || draggingTask !== taskEl) return;
+        // 计算指针移动距离
+        const dx = e.clientX - dragOffsetX;
+        const dy = e.clientY - dragOffsetY;
+        // 更新任务位置，添加边界限制防止拖出画布
+        let newLeft = initialTaskX + dx;
+        let newTop = initialTaskY + dy;
+        // 边界检查：限制在0到canvas宽/高内
+        newLeft = Math.max(0, Math.min(newLeft, canvas.clientWidth - taskEl.clientWidth));
+        newTop = Math.max(0, Math.min(newTop, canvas.clientHeight - taskEl.clientHeight));
+        taskEl.style.left = newLeft + 'px';
+        taskEl.style.top = newTop + 'px';
+      });
+      taskEl.addEventListener('pointerup', (e) => {
+        if (draggingTask === taskEl) {
+          // 更新数据中的位置
+          const t = tasksData.find(t => t.id === task.id);
+          if (t) {
+            t.x = taskEl.offsetLeft;
+            t.y = taskEl.offsetTop;
+          }
+        }
+        draggingTask = null;
+      });
+      // 将创建的任务元素添加到画布
       canvas.appendChild(taskEl);
-      // 清空输入框
-      titleInput.value = '';
-      noteInput.value = '';
+      return taskEl;
+    }
+
+    // 初始化一些示例任务（可选）
+    /* 示例初始化，如不需要可清空
+    tasksData = [
+      { id: generateId(), title: '示例任务1', note: '这是一个示例备注', x: 50, y: 50, expanded: false },
+      { id: generateId(), title: '示例任务2', note: '第二个任务的备注', x: 300, y: 150, expanded: false }
+    ];
+    tasksData.forEach(task => createTaskElement(task));
+    */
+
+    // 添加任务按钮点击：创建新任务
+    addBtn.addEventListener('click', () => {
+      const title = prompt('输入任务标题：');
+      if (!title) return;
+      const note = prompt('输入任务备注：');
+      // 设定新任务默认位置 (50, 50) 加一点偏移避免重叠
+      const offset = tasksData.length * 20 % 100; // 简单偏移计算
+      const taskObj = {
+        id: generateId(),
+        title: title,
+        note: note || '',
+        x: 50 + offset,
+        y: 50 + offset,
+        expanded: !!note // 如果有备注则初始展开
+      };
+      tasksData.push(taskObj);
+      createTaskElement(taskObj);
     });
 
-    // “导出”按钮逻辑：将任务列表导出为 JSON 并复制到剪贴板
-    document.getElementById('exportBtn').addEventListener('click', async () => {
-      if (tasks.length === 0) {
-        alert('当前没有任何任务可导出！');
-        return;
-      }
-      const jsonStr = JSON.stringify(tasks, null, 2);  // 格式化缩进，便于阅读
-      try {
-        // 优先使用异步 Clipboard API 写入剪贴板:contentReference[oaicite:22]{index=22}
-        await navigator.clipboard.writeText(jsonStr);
-        alert('任务列表已导出并复制到剪贴板！');
-      } catch (err) {
-        console.warn('Clipboard API 写入失败，尝试使用execCommand:', err);
-        // 如果 Clipboard API 不支持或被拒绝，使用传统方法复制
-        try {
-          const textarea = document.createElement('textarea');
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          textarea.value = jsonStr;
-          document.body.appendChild(textarea);
-          textarea.select();
-          document.execCommand('copy');  // 同步复制选中文本:contentReference[oaicite:23]{index=23}
-          document.body.removeChild(textarea);
-          alert('任务列表已导出并复制到剪贴板！');
-        } catch (err2) {
-          alert('自动复制失败，请手动复制 JSON 数据。\n' + jsonStr);
-        }
+    // 撤销删除按钮点击：恢复最近删除的任务
+    undoBtn.addEventListener('click', () => {
+      if (lastDeletedTask) {
+        // 重新加入数据
+        tasksData.push(lastDeletedTask);
+        // 重新创建DOM元素
+        createTaskElement(lastDeletedTask);
+        // 清空lastDeleted
+        lastDeletedTask = null;
+      } else {
+        alert('没有可撤销的删除操作');
       }
     });
 
-    // “导入”按钮逻辑：从剪贴板读取 JSON 并导入任务列表
-    document.getElementById('importBtn').addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();  // 读取剪贴板文本:contentReference[oaicite:24]{index=24}
-        if (!text) {
-          alert('剪贴板没有内容或内容为空！');
-          return;
-        }
-        let importTasks;
+    // 导出按钮点击：导出当前任务数据为JSON文件
+    exportBtn.addEventListener('click', () => {
+      const dataStr = JSON.stringify(tasksData, null, 2);
+      const blob = new Blob([dataStr], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tasks-data.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // 导入按钮点击：触发文件选择
+    importBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+    // 文件选择变化事件：读取JSON文件并加载任务
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
         try {
-          importTasks = JSON.parse(text);
-        } catch (err) {
-          alert('剪贴板内容不是有效的任务列表 JSON 格式！');
-          return;
+          const importedData = JSON.parse(reader.result);
+          // 清空当前任务并DOM
+          tasksData = [];
+          canvas.innerHTML = ''; // 移除所有任务DOM元素
+          importedData.forEach(task => {
+            // 确保任务有必要字段
+            if (task.id && task.title) {
+              // 默认值处理
+              task.x = task.x || 0;
+              task.y = task.y || 0;
+              task.note = task.note || '';
+              task.expanded = !!task.expanded;
+              tasksData.push(task);
+              createTaskElement(task);
+            }
+          });
+        } catch (e) {
+          alert('导入失败：文件格式不正确');
         }
-        if (!Array.isArray(importTasks)) {
-          alert('剪贴板JSON格式不正确：顶层应为数组！');
-          return;
+      };
+      reader.readAsText(file);
+    });
+
+    // 画布平移拖拽实现
+    let isPanning = false;
+    let startX = 0, startY = 0;
+    let offsetX = 0, offsetY = 0; // 当前画布偏移
+    let minX = 0, minY = 0;
+    // 最大偏移 = 画布尺寸 - 视口尺寸
+    let maxX = canvas.clientWidth - viewport.clientWidth;
+    let maxY = canvas.clientHeight - viewport.clientHeight;
+    // 动态更新maxX,maxY以防尺寸改变（如窗口大小改变或画布内容变化）
+    function updateBounds() {
+      maxX = canvas.clientWidth - viewport.clientWidth;
+      maxY = canvas.clientHeight - viewport.clientHeight;
+      if (maxX < 0) maxX = 0;
+      if (maxY < 0) maxY = 0;
+    }
+    window.addEventListener('resize', () => {
+      updateBounds();
+      // 视口变化后需要保证当前offset在新的范围内
+      offsetX = Math.max(minX, Math.min(offsetX, maxX));
+      offsetY = Math.max(minY, Math.min(offsetY, maxY));
+      applyTransform(offsetX, offsetY);
+    });
+
+    function applyTransform(x, y) {
+      // 使用CSS3 Transform 平移画布
+      canvas.style.transform = `translate(${-x}px, ${-y}px)`;
+    }
+
+    // 指针按下事件：开始拖拽画布
+    viewport.addEventListener('pointerdown', (e) => {
+      isPanning = true;
+      // 记录开始拖拽时的起始坐标和偏移
+      startX = e.clientX;
+      startY = e.clientY;
+      startOffsetX = offsetX;
+      startOffsetY = offsetY;
+      // 捕获指针，以便拖出视口范围仍能响应
+      viewport.setPointerCapture(e.pointerId);
+    });
+    viewport.addEventListener('pointermove', (e) => {
+      if (!isPanning) return;
+      // 计算指针移动距离（正值表示指针向右/下移动）
+      const dx = startX - e.clientX;
+      const dy = startY - e.clientY;
+      // 计算新的偏移（未限制前）
+      let newOffsetX = startOffsetX + dx;
+      let newOffsetY = startOffsetY + dy;
+      // 更新边界限制值（以防画布或视口动态变化）
+      updateBounds();
+      // 实现弹性拖拽：如果超出边界，允许一定的超出量（距离的一半）
+      if (newOffsetX < minX) {
+        offsetX = minX + (newOffsetX - minX) / 2;
+      } else if (newOffsetX > maxX) {
+        offsetX = maxX + (newOffsetX - maxX) / 2;
+      } else {
+        offsetX = newOffsetX;
+      }
+      if (newOffsetY < minY) {
+        offsetY = minY + (newOffsetY - minY) / 2;
+      } else if (newOffsetY > maxY) {
+        offsetY = maxY + (newOffsetY - maxY) / 2;
+      } else {
+        offsetY = newOffsetY;
+      }
+      applyTransform(offsetX, offsetY);
+    });
+    viewport.addEventListener('pointerup', (e) => {
+      if (!isPanning) return;
+      isPanning = false;
+      // 松开后如果有超出边界则回弹
+      updateBounds();
+      let targetX = offsetX;
+      let targetY = offsetY;
+      if (offsetX < minX) targetX = minX;
+      else if (offsetX > maxX) targetX = maxX;
+      if (offsetY < minY) targetY = minY;
+      else if (offsetY > maxY) targetY = maxY;
+      // 动画过渡将画布弹回边界内
+      if (targetX !== offsetX || targetY !== offsetY) {
+        const startBounceX = offsetX;
+        const startBounceY = offsetY;
+        const dx = targetX - startBounceX;
+        const dy = targetY - startBounceY;
+        let startTime = null;
+        function bounceAnim(timestamp) {
+          if (!startTime) startTime = timestamp;
+          const elapsed = timestamp - startTime;
+          const duration = 300; // 弹回动画时长300ms
+          const t = Math.min(1, elapsed / duration);
+          // 使用ease-out缓动函数
+          const easeOut = 1 - Math.pow(1 - t, 3);
+          offsetX = startBounceX + dx * easeOut;
+          offsetY = startBounceY + dy * easeOut;
+          applyTransform(offsetX, offsetY);
+          if (t < 1) {
+            requestAnimationFrame(bounceAnim);
+          } else {
+            // 动画结束，确保位置修正到边界值
+            offsetX = targetX;
+            offsetY = targetY;
+            applyTransform(offsetX, offsetY);
+          }
         }
-        // 弹出确认提示，警告用户将覆盖现有任务
-        const ok = confirm('导入操作将覆盖当前所有任务，确定继续吗？');
-        if (!ok) return;
-        // 清空当前任务并加载新任务列表
-        tasks = importTasks;
-        saveTasks();
-        renderAllTasks();
-        alert('任务列表已从剪贴板导入并替换当前任务！');
-      } catch (err) {
-        // 可能用户拒绝了读取剪贴板权限
-        alert('无法读取剪贴板内容，请确保已复制了有效的任务 JSON 数据并授予粘贴权限。:contentReference[oaicite:25]{index=25}');
-        console.error('读取剪贴板失败：', err);
+        requestAnimationFrame(bounceAnim);
       }
     });
+    viewport.addEventListener('pointercancel', () => {
+      // 取消手势事件
+      isPanning = false;
+    });
+
+    // 任务拖拽所需的临时变量（用于多个任务共享）
+    let draggingTask = null;
+    let dragOffsetX = 0, dragOffsetY = 0;
+    let initialTaskX = 0, initialTaskY = 0;
   </script>
 </body>
+</html>
+
 </html>
