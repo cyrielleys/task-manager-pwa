@@ -1,166 +1,581 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>任务管理PWA</title>
-  <link rel="manifest" href="manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Board</title>
   <style>
-    body, html {
-      margin: 0; padding: 0; overflow: hidden; font-family: sans-serif;
-    }
-    #canvas {
-      width: 300vw; height: 200vh;
-      position: relative; background-color: #f0f0f0;
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      cursor: grab;
+      background: #f0f0f0;
     }
+    /* 顶部工具栏样式 */
+    #toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 50px;
+      background: #f8f8f8;
+      border-bottom: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      padding: 0 5px;
+      box-sizing: border-box;
+      z-index: 1000;
+    }
+    #toolbar button {
+      margin-right: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      background: #2196F3;
+      cursor: pointer;
+    }
+    #toolbar button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #toolbar button:last-child {
+      margin-right: 0;
+    }
+    #toolbar button:focus {
+      outline: none;
+    }
+    #toolbar button:active {
+      opacity: 0.8;
+    }
+    /* 视口容器，占据顶部工具栏以下的屏幕 */
+    #viewport {
+      position: absolute;
+      top: 50px;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      overflow: hidden;
+    }
+    /* 任务画布 */
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 300vw;
+      height: 200vh;
+      background: #f0f0f0; /* 画布背景色 */
+    }
+    /* 任务框样式 */
     .task {
-      position: absolute; padding: 8px; border: 1px solid #ccc;
-      border-radius: 8px; background-color: #fff; font-size: 14px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      touch-action: none; user-select: none;
-      white-space: pre-wrap; word-break: break-word;
-      max-width: 160px;
-      display: inline-block;
+      position: absolute;
+      min-width: 100px;
+      max-width: 250px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #ffffe0;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+      cursor: grab;
+      user-select: none;
     }
-    .delete-btn {
-      position: absolute; top: -8px; right: -8px;
-      background-color: red; color: white; border: none;
-      width: 16px; height: 16px; border-radius: 50%;
-      cursor: pointer; font-size: 12px;
+    .task:active {
+      cursor: grabbing;
     }
-    .expand-btn {
-      position: absolute; top: -8px; left: -8px;
-      background-color: #007bff; color: white; border: none;
-      width: 16px; height: 16px; border-radius: 50%;
-      cursor: pointer; font-size: 12px;
+    .task-header {
+      display: flex;
+      align-items: center;
+      padding: 4px;
+      background: #fffbdd;
+      border-bottom: 1px solid #ccc;
+      font-size: 14px;
+      font-weight: bold;
     }
-    .details {
-      display: none; margin-top: 4px; font-size: 12px; color: #666;
+    .task-header button {
+      background: none;
+      border: none;
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 4px;
+      cursor: pointer;
     }
-    #undo-btn, #export-btn, #import-btn {
-      position: fixed; top: 10px;
-      padding: 5px 10px; font-size: 14px;
-      z-index: 100; background-color: #007bff;
-      color: white; border: none; border-radius: 4px;
+    .task-header button:focus {
+      outline: none;
     }
-    #undo-btn { right: 10px; display: none; }
-    #export-btn { right: 90px; }
-    #import-btn { right: 170px; }
-
-    #controls {
-      position: fixed; top: 60px; left: 10px; z-index: 100;
-      display: flex; flex-direction: column;
+    .task-header .expandBtn {
+      color: #333;
     }
-    input, button { margin: 2px; padding: 5px; font-size: 14px; }
+    .task-header .deleteBtn {
+      color: #d33;
+      font-weight: bold;
+    }
+    .task-header .task-title {
+      flex: 1;
+      margin: 0 4px;
+      word-break: break-word;
+    }
+    .task-note {
+      display: none;
+      padding: 4px;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+    /* 展开备注时显示备注区域 */
+    .task.expanded .task-note {
+      display: block;
+    }
+    /* 添加任务对话框样式 */
+    #addDialog {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.3);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+    }
+    #addDialog .modal-content {
+      background: #fff;
+      padding: 10px;
+      border-radius: 4px;
+      width: 80%;
+      max-width: 300px;
+      box-sizing: border-box;
+    }
+    #addDialog .modal-content h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+    #addDialog label {
+      display: block;
+      font-size: 14px;
+      margin: 5px 0;
+    }
+    #addDialog input, #addDialog textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 14px;
+      margin-top: 2px;
+      margin-bottom: 8px;
+      padding: 4px;
+    }
+    #addDialog textarea {
+      resize: vertical;
+      height: 60px;
+    }
+    #addDialog .btn-row {
+      text-align: right;
+    }
+    #addDialog button {
+      margin-left: 8px;
+      padding: 6px 12px;
+      font-size: 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #addDialog #saveTaskBtn {
+      background: #2196F3;
+      color: #fff;
+    }
+    #addDialog #cancelTaskBtn {
+      background: #aaa;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
+  <!-- 顶部工具栏按钮 -->
+  <div id="toolbar">
+    <button id="undoBtn" disabled>撤销删除</button>
+    <button id="exportBtn">导出</button>
+    <button id="importBtn">导入</button>
+    <button id="addBtn">添加任务</button>
+  </div>
+  <!-- 画布视口 -->
+  <div id="viewport">
+    <div id="canvas"></div>
+  </div>
+  <!-- 添加任务对话框 -->
+  <div id="addDialog">
+    <div class="modal-content">
+      <h3>添加任务</h3>
+      <label>标题: <input id="taskTitleInput" type="text" placeholder="输入任务标题"></label>
+      <label>备注: <textarea id="taskNoteInput" placeholder="输入备注（可选）"></textarea></label>
+      <div class="btn-row">
+        <button id="cancelTaskBtn" type="button">取消</button>
+        <button id="saveTaskBtn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function(){
+      // 数据结构
+      let tasks = [];
+      let undoStack = [];
+      const maxUndo = 10;
+      let canvasOffsetX = 0, canvasOffsetY = 0;
+      let draggingTask = false, draggingCanvas = false;
+      let dragTaskEl = null;
+      let dragStartX = 0, dragStartY = 0;
+      let initialTaskX = 0, initialTaskY = 0;
+      let initialCanvasOffsetX = 0, initialCanvasOffsetY = 0;
+      let dragTaskWidth = 0, dragTaskHeight = 0;
+      let topZ = 1; // 当前最高层的 z-index 值
 
-<button id="undo-btn">撤销删除</button>
-<button id="export-btn">导出</button>
-<button id="import-btn">导入</button>
-<div id="controls">
-  <input type="text" id="task-input" placeholder="新任务内容">
-  <input type="text" id="details-input" placeholder="新备注内容（可选）">
-  <button id="add-btn">添加任务</button>
-</div>
-<div id="canvas"></div>
+      // 获取 DOM 元素
+      const canvas = document.getElementById('canvas');
+      const viewport = document.getElementById('viewport');
+      const undoBtn = document.getElementById('undoBtn');
+      const exportBtn = document.getElementById('exportBtn');
+      const importBtn = document.getElementById('importBtn');
+      const addBtn = document.getElementById('addBtn');
+      const addDialog = document.getElementById('addDialog');
+      const taskTitleInput = document.getElementById('taskTitleInput');
+      const taskNoteInput = document.getElementById('taskNoteInput');
+      const saveTaskBtn = document.getElementById('saveTaskBtn');
+      const cancelTaskBtn = document.getElementById('cancelTaskBtn');
 
-<script>
-  let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
-  let deletedTasks = [];
-  const canvas = document.getElementById('canvas');
-  const undoBtn = document.getElementById('undo-btn');
-
-  function saveTasks() {
-    localStorage.setItem('tasks', JSON.stringify(tasks));
-  }
-
-  function renderTasks() {
-    canvas.innerHTML = '';
-    tasks.forEach((task, idx) => {
-      const el = document.createElement('div');
-      el.className = 'task';
-      el.style.left = task.x + 'px';
-      el.style.top = task.y + 'px';
-
-      const title = document.createElement('div');
-      title.textContent = task.text;
-      el.appendChild(title);
-
-      if (task.details) {
-        const expandBtn = document.createElement('button');
-        expandBtn.className = 'expand-btn';
-        el.appendChild(expandBtn);
-
-        const details = document.createElement('div');
-        details.className = 'details';
-        details.textContent = task.details;
-        el.appendChild(details);
-
-        expandBtn.onclick = (e) => {
-          e.stopPropagation();
-          details.style.display = details.style.display === 'none' ? 'block' : 'none';
+      // 工具函数：生成唯一任务 ID
+      function generateId() {
+        return 'task-' + Math.random().toString(36).substr(2, 9);
+      }
+      // 将任务数据保存到 localStorage
+      function saveData() {
+        const data = {
+          tasks: tasks,
+          offsetX: canvasOffsetX,
+          offsetY: canvasOffsetY
         };
+        localStorage.setItem('taskBoardData', JSON.stringify(data));
+      }
+      // 创建任务 DOM 元素并添加到画布
+      function createTaskElement(task) {
+        const el = document.createElement('div');
+        el.className = 'task';
+        el.style.left = task.x + 'px';
+        el.style.top = task.y + 'px';
+        if(task.expanded) {
+          el.classList.add('expanded');
+        }
+        el.dataset.id = task.id;
+        // 任务框内部结构
+        el.innerHTML = 
+          '<div class="task-header">' +
+            '<button class="expandBtn" type="button">' + (task.expanded ? '▲' : '▼') + '</button>' +
+            '<div class="task-title"></div>' +
+            '<button class="deleteBtn" type="button">×</button>' +
+          '</div>' +
+          '<div class="task-note"></div>';
+        // 设置标题和备注内容
+        el.querySelector('.task-title').textContent = task.title;
+        const noteEl = el.querySelector('.task-note');
+        noteEl.textContent = task.note || '';
+        const expandBtn = el.querySelector('.expandBtn');
+        if(!task.note) {
+          // 没有备注时隐藏展开按钮
+          expandBtn.style.display = 'none';
+        }
+        // 展开/收起备注事件
+        expandBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if(el.classList.contains('expanded')) {
+            // 收起备注
+            el.classList.remove('expanded');
+            expandBtn.textContent = '▼';
+            task.expanded = false;
+          } else {
+            // 展开备注
+            el.classList.add('expanded');
+            expandBtn.textContent = '▲';
+            task.expanded = true;
+          }
+          saveData();
+        });
+        // 删除任务事件
+        const deleteBtn = el.querySelector('.deleteBtn');
+        deleteBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const taskId = el.dataset.id;
+          const idx = tasks.findIndex(t => t.id === taskId);
+          if(idx >= 0) {
+            const removed = tasks.splice(idx, 1)[0];
+            // 将删除的任务加入撤销栈
+            undoStack.push(removed);
+            if(undoStack.length > maxUndo) {
+              undoStack.shift();
+            }
+            // 从 DOM 中移除任务元素
+            el.remove();
+            // 更新撤销按钮状态
+            undoBtn.disabled = (undoStack.length === 0);
+            saveData();
+          }
+        });
+        // 将数据对象引用存入元素，方便拖拽时访问
+        el.taskData = task;
+        canvas.appendChild(el);
+        return el;
       }
 
-      const delBtn = document.createElement('button');
-      delBtn.className = 'delete-btn';
-      delBtn.onclick = (e) => {
-        e.stopPropagation();
-        deletedTasks.push({...task, idx});
-        if (deletedTasks.length > 10) deletedTasks.shift();
-        tasks.splice(idx, 1);
-        saveTasks(); renderTasks();
-        undoBtn.style.display = 'block';
-      };
-      el.appendChild(delBtn);
+      // 从 localStorage 加载初始数据
+      const stored = localStorage.getItem('taskBoardData');
+      if(stored) {
+        try {
+          const data = JSON.parse(stored);
+          if(data && data.tasks) {
+            tasks = data.tasks;
+          }
+          if(data && data.offsetX !== undefined && data.offsetY !== undefined) {
+            canvasOffsetX = data.offsetX;
+            canvasOffsetY = data.offsetY;
+          }
+        } catch(e) {
+          console.error('Failed to parse stored data', e);
+        }
+      }
+      // 确保每个任务对象都有 expanded 属性
+      if(tasks.length) {
+        tasks.forEach(function(t){ if(t.expanded === undefined) t.expanded = false; });
+      }
+      // 创建已有任务元素
+      for(let t of tasks) {
+        createTaskElement(t);
+      }
+      // 应用存储的画布偏移
+      canvas.style.left = canvasOffsetX + 'px';
+      canvas.style.top = canvasOffsetY + 'px';
+      // 初始化撤销按钮状态
+      undoBtn.disabled = (undoStack.length === 0);
 
-      canvas.appendChild(el);
-    });
-  }
+      // 打开添加任务对话框
+      function openAddDialog() {
+        taskTitleInput.value = '';
+        taskNoteInput.value = '';
+        addDialog.style.display = 'flex';
+        setTimeout(() => taskTitleInput.focus(), 0);
+      }
+      // 关闭添加任务对话框
+      function closeAddDialog() {
+        addDialog.style.display = 'none';
+      }
+      // 添加新任务数据和元素
+      function addTask(title, note) {
+        const id = generateId();
+        // 将新任务放置在当前视口中央附近
+        const vpRect = viewport.getBoundingClientRect();
+        const centerX = -canvasOffsetX + vpRect.width / 2;
+        const centerY = -canvasOffsetY + vpRect.height / 2;
+        const taskData = {
+          id: id,
+          title: title,
+          note: note,
+          x: centerX - 50,  // 稍微偏移，使任务框不被光标遮挡
+          y: centerY - 30,
+          expanded: false
+        };
+        tasks.push(taskData);
+        const el = createTaskElement(taskData);
+        // 新任务放到最前面
+        el.style.zIndex = ++topZ;
+        saveData();
+      }
 
-  undoBtn.onclick = () => {
-    if (deletedTasks.length) {
-      const restoredTask = deletedTasks.pop();
-      tasks.splice(restoredTask.idx, 0, restoredTask);
-      saveTasks(); renderTasks();
-      if (!deletedTasks.length) undoBtn.style.display = 'none';
-    }
-  };
-
-  document.getElementById('add-btn').onclick = () => {
-    const titleInput = document.getElementById('task-input');
-    const detailsInput = document.getElementById('details-input');
-    if (titleInput.value.trim()) {
-      tasks.push({
-        text: titleInput.value.trim(),
-        details: detailsInput.value.trim(),
-        x: 100 + tasks.length * 10,
-        y: 150 + tasks.length * 10
+      // 顶部按钮事件绑定
+      addBtn.addEventListener('click', openAddDialog);
+      cancelTaskBtn.addEventListener('click', closeAddDialog);
+      saveTaskBtn.addEventListener('click', function() {
+        const title = taskTitleInput.value.trim();
+        const note = taskNoteInput.value.trim();
+        if(title === '') {
+          alert('标题不能为空！');
+          return;
+        }
+        addTask(title, note);
+        closeAddDialog();
       });
-      titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
-    }
-  };
+      undoBtn.addEventListener('click', function() {
+        if(undoStack.length === 0) return;
+        const taskData = undoStack.pop();
+        tasks.push(taskData);
+        const el = createTaskElement(taskData);
+        // 恢复的任务放到最前
+        el.style.zIndex = ++topZ;
+        undoBtn.disabled = (undoStack.length === 0);
+        saveData();
+      });
+      exportBtn.addEventListener('click', async function() {
+        const data = {
+          tasks: tasks,
+          offsetX: canvasOffsetX,
+          offsetY: canvasOffsetY
+        };
+        const json = JSON.stringify(data);
+        try {
+          await navigator.clipboard.writeText(json);
+          alert('任务数据已复制到剪贴板');
+        } catch(err) {
+          alert('导出失败: ' + err);
+        }
+      });
+      importBtn.addEventListener('click', async function() {
+        try {
+          const text = await navigator.clipboard.readText();
+          if(!text) {
+            alert('剪贴板为空');
+            return;
+          }
+          const data = JSON.parse(text);
+          if(!data || !data.tasks) {
+            alert('剪贴板内容无效');
+            return;
+          }
+          // 清除当前任务并加载新任务数据
+          tasks = [];
+          undoStack = [];
+          canvas.innerHTML = '';
+          canvasOffsetX = data.offsetX || 0;
+          canvasOffsetY = data.offsetY || 0;
+          if(Array.isArray(data.tasks)) {
+            for(let t of data.tasks) {
+              if(t.expanded === undefined) t.expanded = false;
+              tasks.push(t);
+              createTaskElement(t);
+            }
+          }
+          canvas.style.left = canvasOffsetX + 'px';
+          canvas.style.top = canvasOffsetY + 'px';
+          undoBtn.disabled = true;
+          saveData();
+          alert('任务数据已导入');
+        } catch(err) {
+          alert('导入失败: ' + err);
+        }
+      });
 
-  let canvasOffset = {x:0,y:0}, canvasDrag=false, startDrag;
-  canvas.onpointerdown = e => {
-    canvasDrag = true;
-    startDrag = {x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y};
-  };
-  canvas.onpointermove = e => {
-    if (!canvasDrag) return;
-    canvasOffset.x = e.clientX - startDrag.x;
-    canvasOffset.y = e.clientY - startDrag.y;
-    canvas.style.transform = `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`;
-  };
-  canvas.onpointerup = canvas.onpointercancel = () => canvasDrag = false;
-
-  renderTasks();
-
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-</script>
+      // 画布和任务拖拽事件
+      canvas.addEventListener('pointerdown', function(e) {
+        const targetEl = e.target;
+        // 点击展开/删除按钮不触发拖拽
+        if(targetEl.closest('.expandBtn') || targetEl.closest('.deleteBtn')) {
+          return;
+        }
+        // 点击备注区域，允许滚动不拖拽
+        if(targetEl.closest('.task-note')) {
+          return;
+        }
+        const taskEl = targetEl.closest('.task');
+        if(taskEl) {
+          // 拖拽任务
+          draggingTask = true;
+          dragTaskEl = taskEl;
+          // 提升被拖拽任务的层级
+          dragTaskEl.style.zIndex = ++topZ;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          const taskData = dragTaskEl.taskData;
+          initialTaskX = taskData.x;
+          initialTaskY = taskData.y;
+          // 获取任务元素尺寸用于边界判断
+          dragTaskWidth = dragTaskEl.offsetWidth;
+          dragTaskHeight = dragTaskEl.offsetHeight;
+          // 捕获指针，以便移出元素外仍能收到事件
+          taskEl.setPointerCapture(e.pointerId);
+        } else {
+          // 拖拽画布
+          draggingCanvas = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          initialCanvasOffsetX = canvasOffsetX;
+          initialCanvasOffsetY = canvasOffsetY;
+          canvas.setPointerCapture(e.pointerId);
+        }
+      });
+      canvas.addEventListener('pointermove', function(e) {
+        if(draggingTask && dragTaskEl) {
+          // 移动任务
+          const dx = e.clientX - dragStartX;
+          const dy = e.clientY - dragStartY;
+          let newX = initialTaskX + dx;
+          let newY = initialTaskY + dy;
+          // 限制任务在画布范围内
+          const canvasWidth = canvas.offsetWidth;
+          const canvasHeight = canvas.offsetHeight;
+          if(newX < 0) newX = 0;
+          if(newY < 0) newY = 0;
+          if(newX + dragTaskWidth > canvasWidth) {
+            newX = canvasWidth - dragTaskWidth;
+          }
+          if(newY + dragTaskHeight > canvasHeight) {
+            newY = canvasHeight - dragTaskHeight;
+          }
+          dragTaskEl.style.left = newX + 'px';
+          dragTaskEl.style.top = newY + 'px';
+        } else if(draggingCanvas) {
+          // 移动画布
+          const dx = e.clientX - dragStartX;
+          const dy = e.clientY - dragStartY;
+          let newOffsetX = initialCanvasOffsetX + dx;
+          let newOffsetY = initialCanvasOffsetY + dy;
+          const viewportWidth = viewport.clientWidth;
+          const viewportHeight = viewport.clientHeight;
+          const canvasWidth = canvas.offsetWidth;
+          const canvasHeight = canvas.offsetHeight;
+          // 限制画布拖拽边界，不出现空白
+          if(newOffsetX > 0) newOffsetX = 0;
+          if(newOffsetY > 0) newOffsetY = 0;
+          if(newOffsetX < -(canvasWidth - viewportWidth)) {
+            newOffsetX = -(canvasWidth - viewportWidth);
+          }
+          if(newOffsetY < -(canvasHeight - viewportHeight)) {
+            newOffsetY = -(canvasHeight - viewportHeight);
+          }
+          canvas.style.left = newOffsetX + 'px';
+          canvas.style.top = newOffsetY + 'px';
+          canvasOffsetX = newOffsetX;
+          canvasOffsetY = newOffsetY;
+        }
+      });
+      canvas.addEventListener('pointerup', function(e) {
+        if(draggingTask) {
+          // 更新任务数据中的位置
+          const task = dragTaskEl.taskData;
+          task.x = parseFloat(dragTaskEl.style.left);
+          task.y = parseFloat(dragTaskEl.style.top);
+          saveData();
+        }
+        if(draggingCanvas) {
+          // 保存画布偏移位置
+          saveData();
+        }
+        // 重置拖拽状态
+        draggingTask = false;
+        draggingCanvas = false;
+        dragTaskEl = null;
+      });
+      canvas.addEventListener('pointercancel', function(e) {
+        if(draggingTask && dragTaskEl) {
+          const task = dragTaskEl.taskData;
+          task.x = parseFloat(dragTaskEl.style.left);
+          task.y = parseFloat(dragTaskEl.style.top);
+          saveData();
+        }
+        if(draggingCanvas) {
+          saveData();
+        }
+        draggingTask = false;
+        draggingCanvas = false;
+        dragTaskEl = null;
+      });
+    })();
+  </script>
 </body>
 </html>
