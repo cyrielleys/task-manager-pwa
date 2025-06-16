@@ -1,4 +1,3 @@
-index.html
 <!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -7,18 +6,69 @@ index.html
   <title>任务管理PWA</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body {font-family:sans-serif;text-align:center;padding:20px;}
+    body { font-family:sans-serif; padding:20px; }
+    #tasks { margin-top:20px; }
+    .task {
+      padding:10px;
+      border:1px solid #ddd;
+      margin-bottom:8px;
+      position:relative;
+    }
+    .delete-btn {
+      position:absolute; right:8px; top:8px;
+      background:red; color:white; border:none; cursor:pointer;
+      border-radius:50%; width:20px; height:20px; line-height:18px;
+    }
   </style>
 </head>
 <body>
-  <h2>我的任务管理PWA</h2>
-  <p>欢迎！应用已成功运行。</p>
+  <h2>任务管理PWA</h2>
+
+  <input type="text" id="task-input" placeholder="输入新任务">
+  <button id="add-btn">添加任务</button>
+
+  <div id="tasks"></div>
 
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').then(() => {
-        console.log('Service Worker 注册成功');
+    let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+
+    function renderTasks() {
+      const taskContainer = document.getElementById('tasks');
+      taskContainer.innerHTML = '';
+      tasks.forEach((task, index) => {
+        const taskEl = document.createElement('div');
+        taskEl.className = 'task';
+        taskEl.innerText = task;
+        
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-btn';
+        delBtn.innerText = '×';
+        delBtn.onclick = () => {
+          tasks.splice(index, 1);
+          localStorage.setItem('tasks', JSON.stringify(tasks));
+          renderTasks();
+        };
+
+        taskEl.appendChild(delBtn);
+        taskContainer.appendChild(taskEl);
       });
+    }
+
+    document.getElementById('add-btn').onclick = () => {
+      const input = document.getElementById('task-input');
+      const task = input.value.trim();
+      if (task) {
+        tasks.push(task);
+        input.value = '';
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+        renderTasks();
+      }
+    };
+
+    renderTasks();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
     }
   </script>
 </body>
