@@ -21,16 +21,8 @@
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       touch-action: none; user-select: none;
       white-space: pre-wrap; word-break: break-word;
-      min-width: 30px; max-width: 160px;
+      max-width: 160px;
       display: inline-block;
-    }
-    .task.short {
-      white-space: nowrap;
-      width: auto;
-    }
-    .task.long {
-      white-space: pre-wrap;
-      width: 80px;
     }
     .delete-btn {
       position: absolute; top: -8px; right: -8px;
@@ -64,8 +56,8 @@
 
 <button id="undo-btn">撤销删除</button>
 <div id="controls">
-  <input type="text" id="task-input" placeholder="任务标题">
-  <input type="text" id="details-input" placeholder="任务详情（可选）">
+  <input type="text" id="task-input" placeholder="新任务内容">
+  <input type="text" id="details-input" placeholder="新备注内容（可选）">
   <button id="add-btn">添加任务</button>
 </div>
 <div id="canvas"></div>
@@ -91,12 +83,6 @@
       const title = document.createElement('div');
       title.textContent = task.text;
       el.appendChild(title);
-
-      if ([...task.text].reduce((len, c) => len + (c.match(/[^\x00-\xff]/) ? 2 : 1), 0) <= 10) {
-        el.classList.add('short');
-      } else {
-        el.classList.add('long');
-      }
 
       if (task.details) {
         const expandBtn = document.createElement('button');
@@ -165,20 +151,6 @@
       titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
   };
-
-  let canvasOffset = {x:0,y:0}, canvasDrag=false, startDrag;
-  canvas.onpointerdown = e => {
-    if (e.target !== canvas) return;
-    canvasDrag = true;
-    startDrag = {x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y};
-  };
-  canvas.onpointermove = e => {
-    if (!canvasDrag) return;
-    canvasOffset.x = e.clientX - startDrag.x;
-    canvasOffset.y = e.clientY - startDrag.y;
-    canvas.style.transform = `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`;
-  };
-  canvas.onpointerup = canvas.onpointercancel = () => canvasDrag = false;
 
   renderTasks();
 
