@@ -14,6 +14,7 @@
       position: relative; background-color: #f0f0f0;
       touch-action: none;
       overflow: hidden;
+      cursor: grab;
     }
     .task {
       position: absolute; padding: 8px; border: 1px solid #ccc;
@@ -64,7 +65,7 @@
 
 <script>
   let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
-  let deletedTask = null;
+  let deletedTasks = [];
   const canvas = document.getElementById('canvas');
   const undoBtn = document.getElementById('undo-btn');
 
@@ -105,7 +106,8 @@
       delBtn.className = 'delete-btn'; delBtn.textContent = '×';
       delBtn.onclick = (e) => {
         e.stopPropagation();
-        deletedTask = {...task, idx};
+        deletedTasks.push({...task, idx});
+        if (deletedTasks.length > 10) deletedTasks.shift();
         tasks.splice(idx, 1);
         saveTasks(); renderTasks();
         undoBtn.style.display = 'block';
@@ -135,11 +137,11 @@
   }
 
   undoBtn.onclick = () => {
-    if (deletedTask) {
-      tasks.splice(deletedTask.idx, 0, deletedTask);
+    if (deletedTasks.length) {
+      const restoredTask = deletedTasks.pop();
+      tasks.splice(restoredTask.idx, 0, restoredTask);
       saveTasks(); renderTasks();
-      undoBtn.style.display = 'none';
-      deletedTask = null;
+      if (!deletedTasks.length) undoBtn.style.display = 'none';
     }
   };
 
@@ -151,11 +153,25 @@
         text: titleInput.value.trim(),
         details: detailsInput.value.trim(),
         x: 50 + tasks.length * 10,
-        y: 80 + tasks.length * 10
+        y: 100 + tasks.length * 10
       });
       titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
   };
+
+  let canvasOffset = {x:0,y:0}, canvasDrag=false, startDrag;
+  canvas.onpointerdown = e => {
+    if (e.target !== canvas) return;
+    canvasDrag = true;
+    startDrag = {x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y};
+  };
+  canvas.onpointermove = e => {
+    if (!canvasDrag) return;
+    canvasOffset.x = e.clientX - startDrag.x;
+    canvasOffset.y = e.clientY - startDrag.y;
+    canvas.style.transform = `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`;
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => canvasDrag = false;
 
   renderTasks();
 
