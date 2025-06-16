@@ -1,0 +1,15 @@
+{
+  "name": "任务管理PWA",
+  "short_name": "任务管理",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "description": "我的任务管理工具",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/?size=512&id=110042&format=png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
