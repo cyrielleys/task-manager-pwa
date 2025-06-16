@@ -118,24 +118,6 @@
       };
       el.appendChild(delBtn);
 
-      let offsetX, offsetY, dragging;
-      el.onpointerdown = e => {
-        dragging = el; el.setPointerCapture(e.pointerId);
-        offsetX = e.clientX - el.offsetLeft;
-        offsetY = e.clientY - el.offsetTop;
-      };
-      el.onpointermove = e => {
-        if (dragging !== el) return;
-        el.style.left = (e.clientX - offsetX) + 'px';
-        el.style.top = (e.clientY - offsetY) + 'px';
-      };
-      el.onpointerup = el.onpointercancel = () => {
-        if (dragging === el) {
-          dragging = null;
-          task.x = el.offsetLeft; task.y = el.offsetTop;
-          saveTasks();
-        }
-      };
       canvas.appendChild(el);
     });
   }
@@ -162,6 +144,19 @@
       titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
   };
+
+  let canvasOffset = {x:0,y:0}, canvasDrag=false, startDrag;
+  canvas.onpointerdown = e => {
+    canvasDrag = true;
+    startDrag = {x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y};
+  };
+  canvas.onpointermove = e => {
+    if (!canvasDrag) return;
+    canvasOffset.x = e.clientX - startDrag.x;
+    canvasOffset.y = e.clientY - startDrag.y;
+    canvas.style.transform = `translate(${canvasOffset.x}px, ${canvasOffset.y}px)`;
+  };
+  canvas.onpointerup = canvas.onpointercancel = () => canvasDrag = false;
 
   renderTasks();
 
