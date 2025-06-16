@@ -1,491 +1,541 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html>
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>任务管理PWA</title>
-  <link rel="manifest" href="manifest.json" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Task Board</title>
   <style>
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: #eee;
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #fff;
     }
-    #top-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      background: #f9f9f9;
-      padding: 8px;
-      box-sizing: border-box;
+    #topbar {
+      position: fixed; top: 0; left: 0; width: 100%;
+      background: #f9f9f9; border-bottom: 1px solid #ccc;
+      padding: 5px; box-sizing: border-box;
       z-index: 1000;
-      border-bottom: 1px solid #ccc;
+      display: flex; align-items: center;
     }
-    /* Layout for inputs and add button */
-    #top-bar .inputs {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-start;
-      gap: 8px;
+    #taskInput {
+      flex: 1; padding: 6px;
+      font-size: 14px; box-sizing: border-box;
     }
-    #top-bar input {
-      font-size: 16px;
-      padding: 6px;
-      box-sizing: border-box;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      -webkit-appearance: none;
+    #topbar button {
+      margin-left: 5px; padding: 6px 10px;
+      font-size: 14px; cursor: pointer;
     }
-    #top-bar input:focus {
-      outline: none;
-      border-color: #007bff;
+    #canvas-container {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      /* top is set via script to the #topbar height */
+      overflow: hidden; background: #eee;
     }
-    #add-btn {
-      font-size: 16px;
-      padding: 6px 12px;
-      border: none;
-      border-radius: 4px;
-      background: #007bff;
-      color: #fff;
-      cursor: pointer;
-      min-height: 72px;
-    }
-    #add-btn:disabled {
-      background: #ccc;
-      color: #666;
-      cursor: not-allowed;
-    }
-    /* Buttons for undo, export, import */
-    #controls {
-      margin-top: 8px;
-    }
-    #controls button {
-      font-size: 16px;
-      padding: 6px 12px;
-      border: none;
-      border-radius: 4px;
-      background: #007bff;
-      color: #fff;
-      cursor: pointer;
-      margin-right: 8px;
-    }
-    #controls button:disabled {
-      background: #ccc;
-      color: #666;
-      cursor: not-allowed;
-    }
-    /* Canvas area for tasks */
     #canvas {
-      position: relative;
-      width: 600vw;
-      height: 200vh;
-      /* Disable default scrolling gestures to implement manual panning */
-      touch-action: none;
+      position: absolute; top: 0; left: 0;
+      width: 600vw; height: 200vh;
+      transform-origin: 0 0;
+      touch-action: none;        /* Disable browser touch panning/zoom on canvas:contentReference[oaicite:3]{index=3} */
+      will-change: transform;    /* Hint for smoother GPU-accelerated transforms */
+      -webkit-transform: translateZ(0);
+              transform: translateZ(0);  /* Use GPU layer to prevent Safari flicker */
     }
     .task {
       position: absolute;
-      display: block;
-      background: #fff;
-      color: #000;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      padding: 8px;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-touch-callout: none;
+      min-width: 100px; max-width: 300px;
+      padding: 5px;
+      background: #ffffe0;  /* light yellow background for tasks */
+      border: 1px solid #ccc; border-radius: 4px;
+      box-shadow: 1px 1px 5px rgba(0,0,0,0.15);
+      cursor: grab;
       touch-action: none;
-    }
-    .task-title {
-      font-weight: bold;
-      margin-bottom: 4px;
-      display: inline;
-    }
-    .task-note {
-      margin-top: 4px;
-      display: none;
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
-    .task.expanded .task-note {
-      display: block;
-    }
-    .delete-btn {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-      width: 20px;
-      height: 20px;
-      border: none;
-      border-radius: 50%;
-      background: red;
-      color: #fff;
-      font-size: 14px;
-      line-height: 18px;
-      text-align: center;
-      padding: 0;
-      cursor: pointer;
       user-select: none;
-      -webkit-user-select: none;
     }
-    .delete-btn:active {
-      background: darkred;
+    .task:active { cursor: grabbing; }
+    .task-note {
+      display: none;
+      margin-top: 4px;
+      font-size: 90%; color: #333;
+      white-space: pre-wrap;
+    }
+    .task.expanded .task-note { display: block; }
+    .delete-btn {
+      position: absolute; top: 2px; right: 4px;
+      padding: 0 4px;
+      border: none; background: transparent;
+      font-size: 14px; font-weight: bold; color: #888;
+      cursor: pointer; user-select: none;
     }
   </style>
 </head>
 <body>
-  <div id="top-bar">
-    <div class="inputs">
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <input type="text" id="task-title-input" placeholder="新任务内容" />
-        <input type="text" id="task-note-input" placeholder="新备注内容（可选）" />
-      </div>
-      <button id="add-btn" disabled>添加任务</button>
-    </div>
-    <div id="controls">
-      <button id="undo-btn" disabled>撤销删除</button>
-      <button id="export-btn">导出</button>
-      <button id="import-btn">导入</button>
-    </div>
+  <!-- Top fixed control bar -->
+  <div id="topbar">
+    <input type="text" id="taskInput" placeholder="Add a task..." />
+    <button id="addBtn">Add</button>
+    <button id="undoBtn" disabled>Undo</button>
+    <button id="exportBtn">Export</button>
+    <button id="importBtn">Import</button>
   </div>
-  <div id="canvas"></div>
+  <!-- Canvas container (scrollable area) -->
+  <div id="canvas-container">
+    <div id="canvas"><!-- Task boxes will be appended here --></div>
+  </div>
+  <!-- Hidden file input for Import -->
+  <input type="file" id="fileInput" accept=".json" style="display:none;" />
   <script>
-    // Task data array: each task is { title, note, x, y, expanded }
-    let tasks = [];
-    let lastDeleted = null;  // store last deleted task for undo
-    // Get references to elements
-    const taskTitleInput = document.getElementById('task-title-input');
-    const taskNoteInput = document.getElementById('task-note-input');
-    const addBtn = document.getElementById('add-btn');
-    const undoBtn = document.getElementById('undo-btn');
-    const exportBtn = document.getElementById('export-btn');
-    const importBtn = document.getElementById('import-btn');
-    const canvas = document.getElementById('canvas');
-    // Enable/disable Add button based on title input
-    taskTitleInput.addEventListener('input', () => {
-      addBtn.disabled = taskTitleInput.value.trim() === '';
-    });
-    // Dragging state
-    let draggingTask = null;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    let pointerId = null;
-    // Canvas panning state
-    let panning = false;
-    let lastClientX = 0;
-    let lastClientY = 0;
-    // Render all tasks to the canvas
-    function renderTasks() {
-      canvas.innerHTML = '';
-      tasks.forEach((task, index) => {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'task';
-        taskEl.style.left = task.x + 'px';
-        taskEl.style.top = task.y + 'px';
-        if (task.expanded) {
-          taskEl.classList.add('expanded');
+    (() => {
+      const topbar = document.getElementById('topbar');
+      const container = document.getElementById('canvas-container');
+      const canvas   = document.getElementById('canvas');
+      const taskInput = document.getElementById('taskInput');
+      const addBtn   = document.getElementById('addBtn');
+      const undoBtn  = document.getElementById('undoBtn');
+      const exportBtn= document.getElementById('exportBtn');
+      const importBtn= document.getElementById('importBtn');
+      const fileInput= document.getElementById('fileInput');
+
+      // Adjust canvas-container top offset to leave room for the fixed topbar
+      function resizeCanvasContainer() {
+        container.style.top = topbar.offsetHeight + 'px';
+      }
+      resizeCanvasContainer();
+      window.addEventListener('resize', resizeCanvasContainer);
+
+      // Data structures
+      let tasksData = [];
+      let idCounter = 0;
+      let lastDeleted = null;
+
+      // Canvas transform state
+      let transX = 0, transY = 0, scale = 1;
+      const minScale = 0.5, maxScale = 3;
+
+      // Drag/zoom state
+      let isDraggingCanvas = false;
+      let dragCanvasPointerId = null;
+      let baseTransX = 0, baseTransY = 0;
+      let dragStartX = 0, dragStartY = 0;
+      let draggingTaskId = null;
+      let dragTaskPointerId = null;
+      let dragOffsetX = 0, dragOffsetY = 0;
+      let dragStartPX = 0, dragStartPY = 0;
+      let taskMoved = false;
+      let pinchActive = false;
+      let pinchPointers = [];
+      let lastMidX = 0, lastMidY = 0;
+      let lastDist = 0;
+      const pointerPositions = {};
+
+      // Canvas dimensions (px in content coords)
+      const canvasWidth  = canvas.offsetWidth;
+      const canvasHeight = canvas.offsetHeight;
+
+      // Helper: create a task element and append to canvas
+      function createTaskElement(task) {
+        const el = document.createElement('div');
+        el.className = 'task';
+        el.setAttribute('data-id', task.id);
+        el.textContent = task.text;
+        if (task.note && task.note !== '') {
+          // Add note sub-element if note text exists
+          const noteDiv = document.createElement('div');
+          noteDiv.className = 'task-note';
+          noteDiv.textContent = task.note;
+          el.appendChild(noteDiv);
         }
-        // Task title and note elements
-        const titleEl = document.createElement('div');
-        titleEl.className = 'task-title';
-        titleEl.textContent = task.title;
-        const noteEl = document.createElement('div');
-        noteEl.className = 'task-note';
-        noteEl.textContent = task.note;
-        if (task.note && task.note.length > 0) {
-          const arrow = document.createElement('span');
-          arrow.className = 'arrow';
-          arrow.textContent = task.expanded ? '▼' : '▶';
-          arrow.style.fontSize = '14px';
-          arrow.style.marginLeft = '4px';
-          titleEl.appendChild(arrow);
-        }
-        taskEl.appendChild(titleEl);
-        taskEl.appendChild(noteEl);
         // Delete button
         const delBtn = document.createElement('button');
         delBtn.className = 'delete-btn';
         delBtn.textContent = '×';
-        taskEl.appendChild(delBtn);
-        canvas.appendChild(taskEl);
-        // Prevent drag start when pressing delete button
-        delBtn.addEventListener('pointerdown', (e) => {
-          e.stopPropagation();
-        });
-        // Delete task on delete button click
-        delBtn.addEventListener('click', () => {
-          tasks.splice(index, 1);
-          lastDeleted = { task: task, index: index };
-          undoBtn.disabled = false;
-          localStorage.setItem('tasks', JSON.stringify(tasks));
-          renderTasks();
-        });
-        // Pointer events for dragging tasks
-        taskEl.addEventListener('pointerdown', (e) => {
-          if (e.button !== undefined && e.button !== 0) return;
-          draggingTask = taskEl;
-          pointerId = e.pointerId;
-          dragging = false;
-          startX = e.clientX + window.scrollX;
-          startY = e.clientY + window.scrollY;
-          dragOffsetX = startX - task.x;
-          dragOffsetY = startY - task.y;
-          // Bring this task to top by updating z-index
-          taskEl.style.zIndex = Date.now();
-          taskEl.setPointerCapture(pointerId);
-          e.preventDefault();
-        });
-        taskEl.addEventListener('pointermove', (e) => {
-          if (e.pointerId !== pointerId) return;
-          const currentX = e.clientX + window.scrollX;
-          const currentY = e.clientY + window.scrollY;
-          const dx = currentX - startX;
-          const dy = currentY - startY;
-          if (!dragging && Math.abs(dx) < 5 && Math.abs(dy) < 5) {
-            return;
-          }
-          dragging = true;
-          let newLeft = currentX - dragOffsetX;
-          let newTop = currentY - dragOffsetY;
-          const canvasRect = { width: canvas.offsetWidth, height: canvas.offsetHeight };
-          const elWidth = taskEl.offsetWidth;
-          const elHeight = taskEl.offsetHeight;
-          if (newLeft < 0) newLeft = 0;
-          if (newTop < 0) newTop = 0;
-          if (newLeft + elWidth > canvasRect.width) {
-            newLeft = canvasRect.width - elWidth;
-          }
-          if (newTop + elHeight > canvasRect.height) {
-            newTop = canvasRect.height - elHeight;
-          }
-          taskEl.style.left = newLeft + 'px';
-          taskEl.style.top = newTop + 'px';
-          // Prevent scrolling while dragging
-          e.preventDefault();
-        });
-        taskEl.addEventListener('pointerup', (e) => {
-          if (e.pointerId !== pointerId) return;
-          taskEl.releasePointerCapture(pointerId);
-          pointerId = null;
-          if (dragging) {
-            const newX = parseInt(taskEl.style.left);
-            const newY = parseInt(taskEl.style.top);
-            task.x = newX;
-            task.y = newY;
-            localStorage.setItem('tasks', JSON.stringify(tasks));
-          } else {
-            // Click without drag: toggle note
-            task.expanded = !task.expanded;
-            if (task.expanded) {
-              taskEl.classList.add('expanded');
-            } else {
-              taskEl.classList.remove('expanded');
-            }
-            localStorage.setItem('tasks', JSON.stringify(tasks));
-            const arrow = taskEl.querySelector('.arrow');
-            if (arrow) {
-              arrow.textContent = task.expanded ? '▼' : '▶';
-            }
-          }
-          draggingTask = null;
-          dragging = false;
-        });
-        taskEl.addEventListener('pointercancel', (e) => {
-          if (e.pointerId !== pointerId) return;
-          taskEl.releasePointerCapture(pointerId);
-          pointerId = null;
-          if (dragging) {
-            task.x = parseInt(taskEl.style.left);
-            task.y = parseInt(taskEl.style.top);
-            localStorage.setItem('tasks', JSON.stringify(tasks));
-          }
-          draggingTask = null;
-          dragging = false;
-        });
-      });
-    }
-    // Add new task
-    addBtn.onclick = () => {
-      const title = taskTitleInput.value.trim();
-      const note = taskNoteInput.value.trim();
-      if (!title) return;
-      let newX = 10, newY = 10;
-      if (tasks.length > 0) {
-        const taskElements = document.querySelectorAll('.task');
-        const existing = [];
-        taskElements.forEach(el => {
-          existing.push({
-            x: parseInt(el.style.left),
-            y: parseInt(el.style.top),
-            width: el.offsetWidth,
-            height: el.offsetHeight
-          });
-        });
-        const estWidth = 160, estHeight = 100;
-        outer: for (let y = 10; y < 500; y += 20) {
-          for (let x = 10; x < 500; x += 20) {
-            let overlap = false;
-            for (const t of existing) {
-              if (x < t.x + t.width &&
-                  x + estWidth > t.x &&
-                  y < t.y + t.height &&
-                  y + estHeight > t.y) {
-                overlap = true;
-                break;
-              }
-            }
-            if (!overlap) {
-              newX = x;
-              newY = y;
-              break outer;
-            }
-          }
-        }
+        // Prevent triggering drag events when touching the delete button
+        delBtn.addEventListener('pointerdown', ev => ev.stopPropagation());
+        el.appendChild(delBtn);
+        // Position the task box
+        el.style.left = task.x + 'px';
+        el.style.top  = task.y + 'px';
+        canvas.appendChild(el);
+        return el;
       }
-      const newTask = { title: title, note: note, x: newX, y: newY, expanded: false };
-      tasks.push(newTask);
-      localStorage.setItem('tasks', JSON.stringify(tasks));
-      taskTitleInput.value = '';
-      taskNoteInput.value = '';
-      addBtn.disabled = true;
-      renderTasks();
-    };
-    // Undo delete
-    undoBtn.onclick = () => {
-      if (lastDeleted) {
-        tasks.splice(lastDeleted.index, 0, lastDeleted.task);
+
+      // Add a new task from the input text
+      function addTask(text) {
+        if (!text) return;
+        const task = { id: ++idCounter, text: text, note: '' };
+        // Measure the task's size by creating a temporary hidden element
+        const temp = document.createElement('div');
+        temp.className = 'task';
+        temp.style.visibility = 'hidden';
+        temp.textContent = text;
+        canvas.appendChild(temp);
+        const newWidth  = temp.offsetWidth;
+        const newHeight = temp.offsetHeight;
+        canvas.removeChild(temp);
+        // Determine initial position (center of current view)
+        const viewRect = container.getBoundingClientRect();
+        const visibleLeft = Math.max(0, -transX / scale);
+        const visibleTop  = Math.max(0, -transY / scale);
+        const visibleWidth  = viewRect.width / scale;
+        const visibleHeight = viewRect.height / scale;
+        let posX = visibleLeft + visibleWidth/2 - newWidth/2;
+        let posY = visibleTop  + visibleHeight/2 - newHeight/2;
+        // Clamp inside canvas
+        posX = Math.max(0, Math.min(posX, canvasWidth - newWidth));
+        posY = Math.max(0, Math.min(posY, canvasHeight - newHeight));
+        // Avoid overlapping existing tasks
+        let tries = 0;
+        while (tries < 50) {
+          let overlap = false;
+          for (const t of tasksData) {
+            const tRight = t.x + (t.width || 0);
+            const tBottom = t.y + (t.height || 0);
+            if (posX < tRight && posX + newWidth > t.x && posY < tBottom && posY + newHeight > t.y) {
+              overlap = true;
+              break;
+            }
+          }
+          if (!overlap) break;
+          posX += 30;
+          posY += 30;
+          if (posX + newWidth > canvasWidth) posX = 0;
+          if (posY + newHeight > canvasHeight) posY = 0;
+          tries++;
+        }
+        task.x = posX;
+        task.y = posY;
+        task.width  = newWidth;
+        task.height = newHeight;
+        tasksData.push(task);
+        createTaskElement(task);
+      }
+
+      // Undo last deleted task
+      function undoDelete() {
+        if (!lastDeleted) return;
+        const task = lastDeleted;
         lastDeleted = null;
+        task.id = ++idCounter;  // assign new ID
+        tasksData.push(task);
+        createTaskElement(task);
         undoBtn.disabled = true;
-        localStorage.setItem('tasks', JSON.stringify(tasks));
-        renderTasks();
       }
-    };
-    // Export tasks to clipboard
-    exportBtn.onclick = () => {
-      const data = JSON.stringify(tasks);
-      navigator.clipboard.writeText(data).then(() => {
-        alert('任务数据已复制到剪贴板');
-      }).catch(err => {
-        alert('无法复制到剪贴板: ' + err);
-      });
-    };
-    // Import tasks from clipboard
-    importBtn.onclick = async () => {
-      try {
-        if (tasks.length > 0) {
-          if (!confirm('导入操作将覆盖当前任务列表，确定继续？')) {
-            return;
-          }
-        }
-        const text = await navigator.clipboard.readText();
-        if (!text) {
-          alert('剪贴板为空');
+
+      // Export tasks to JSON file
+      function exportTasks() {
+        const data = tasksData.map(({ id, width, height, ...rest }) => rest);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'tasks.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      // Import tasks from uploaded JSON text
+      function importTasks(jsonText) {
+        let imported = [];
+        try {
+          const data = JSON.parse(jsonText);
+          imported = Array.isArray(data) ? data : (data.tasks || []);
+        } catch (e) {
+          alert('Invalid task file format!');
           return;
         }
-        const imported = JSON.parse(text);
-        if (Array.isArray(imported)) {
-          if (imported.length > 0 && typeof imported[0] === 'string') {
-            tasks = imported.map((t, i) => ({
-              title: t,
-              note: '',
-              x: 10,
-              y: 10 + i * 60,
-              expanded: false
-            }));
-          } else {
-            tasks = imported.map(obj => ({
-              title: String(obj.title || ''),
-              note: String(obj.note || ''),
-              x: typeof obj.x === 'number' ? obj.x : 10,
-              y: typeof obj.y === 'number' ? obj.y : 10,
-              expanded: !!obj.expanded
-            }));
-          }
-          lastDeleted = null;
-          undoBtn.disabled = true;
-          localStorage.setItem('tasks', JSON.stringify(tasks));
-          renderTasks();
-        } else {
-          alert('剪贴板数据格式不正确');
+        // Remove existing tasks from canvas
+        for (const t of tasksData) {
+          const el = canvas.querySelector('[data-id="' + t.id + '"]');
+          if (el) canvas.removeChild(el);
         }
-      } catch (err) {
-        alert('导入失败: ' + err);
+        tasksData = [];
+        lastDeleted = null;
+        undoBtn.disabled = true;
+        // Add imported tasks
+        for (const t of imported) {
+          const task = {
+            id: ++idCounter,
+            text: t.text || '', 
+            note: t.note || '',
+            x: Math.max(0, Math.min(t.x || 0, canvasWidth - 1)),
+            y: Math.max(0, Math.min(t.y || 0, canvasHeight - 1))
+          };
+          tasksData.push(task);
+          const el = createTaskElement(task);
+          // Store element’s size for future placement calculations
+          task.width  = el.offsetWidth;
+          task.height = el.offsetHeight;
+        }
       }
-    };
-    // Canvas background panning
-    canvas.addEventListener('pointerdown', (e) => {
-      if (e.target !== canvas) return;
-      if (e.button !== undefined && e.button !== 0) return;
-      panning = true;
-      lastClientX = e.clientX;
-      lastClientY = e.clientY;
-      canvas.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    });
-    canvas.addEventListener('pointermove', (e) => {
-      if (!panning) return;
-      const dx = lastClientX - e.clientX;
-      const dy = lastClientY - e.clientY;
-      if (dx !== 0 || dy !== 0) {
-        window.scrollBy(dx, dy);
-        lastClientX = e.clientX;
-        lastClientY = e.clientY;
-      }
-    });
-    canvas.addEventListener('pointerup', (e) => {
-      if (!panning) return;
-      canvas.releasePointerCapture(e.pointerId);
-      panning = false;
-    });
-    canvas.addEventListener('pointercancel', (e) => {
-      if (!panning) return;
-      canvas.releasePointerCapture(e.pointerId);
-      panning = false;
-    });
-    // Initialize tasks from localStorage and adjust canvas margin
-    window.addEventListener('DOMContentLoaded', () => {
-      const stored = localStorage.getItem('tasks');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            if (parsed.length > 0 && typeof parsed[0] === 'string') {
-              tasks = parsed.map((t, i) => ({
-                title: t,
-                note: '',
-                x: 10,
-                y: 10 + i * 60,
-                expanded: false
-              }));
-            } else {
-              tasks = parsed.map(obj => ({
-                title: String(obj.title || ''),
-                note: String(obj.note || ''),
-                x: typeof obj.x === 'number' ? obj.x : 10,
-                y: typeof obj.y === 'number' ? obj.y : 10,
-                expanded: !!obj.expanded
-              }));
+
+      // Topbar button event handlers
+      addBtn.addEventListener('click', () => {
+        addTask(taskInput.value.trim());
+        taskInput.value = '';
+      });
+      taskInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          addTask(taskInput.value.trim());
+          taskInput.value = '';
+        }
+      });
+      undoBtn.addEventListener('click', undoDelete);
+      exportBtn.addEventListener('click', exportTasks);
+      importBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => { importTasks(e.target.result); };
+        reader.readAsText(file);
+        fileInput.value = '';  // reset input
+      });
+
+      // Delegate click on delete buttons to handle task deletion
+      container.addEventListener('click', e => {
+        if (e.target.classList.contains('delete-btn')) {
+          const taskElem = e.target.closest('.task');
+          if (!taskElem) return;
+          const taskId = Number(taskElem.getAttribute('data-id'));
+          const idx = tasksData.findIndex(t => t.id === taskId);
+          if (idx >= 0) {
+            lastDeleted = tasksData[idx];
+            tasksData.splice(idx, 1);
+          }
+          canvas.removeChild(taskElem);
+          undoBtn.disabled = !lastDeleted;
+        }
+      });
+
+      // Pointer events for dragging and zooming
+      container.addEventListener('pointerdown', e => {
+        if (e.button !== undefined && e.button !== 0) return;  // only handle primary pointer
+        // If a second finger touches during canvas drag -> start pinch zoom
+        if (!pinchActive && isDraggingCanvas && dragCanvasPointerId && e.pointerId !== dragCanvasPointerId) {
+          pinchActive = true;
+          pinchPointers = [dragCanvasPointerId, e.pointerId];
+          pointerPositions[e.pointerId] = { x: e.clientX, y: e.clientY };
+          const p1 = pointerPositions[pinchPointers[0]];
+          const p2 = pointerPositions[pinchPointers[1]];
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          lastDist = Math.hypot(dx, dy);
+          lastMidX = (p1.x + p2.x) / 2;
+          lastMidY = (p1.y + p2.y) / 2;
+          // End single-finger panning
+          isDraggingCanvas = false;
+          dragCanvasPointerId = null;
+          return;
+        }
+        // If already dragging a task, ignore additional pointers
+        if (draggingTaskId !== null && e.pointerId !== dragTaskPointerId) {
+          return;
+        }
+        const target = e.target;
+        const taskElem = target.closest('.task');
+        if (taskElem && taskElem.parentElement === canvas) {
+          // Begin dragging a task box
+          draggingTaskId = Number(taskElem.getAttribute('data-id'));
+          dragTaskPointerId = e.pointerId;
+          // Bring task to front
+          taskElem.style.zIndex = '500';
+          // Calculate pointer offset within the task (in content coordinates)
+          const pointerX = (e.clientX - transX) / scale;
+          const pointerY = (e.clientY - transY) / scale;
+          const task = tasksData.find(t => t.id === draggingTaskId);
+          dragOffsetX = pointerX - task.x;
+          dragOffsetY = pointerY - task.y;
+          dragStartPX = e.clientX;
+          dragStartPY = e.clientY;
+          taskMoved = false;
+          container.setPointerCapture(e.pointerId);
+        } else {
+          // Begin dragging (panning) the whole canvas
+          isDraggingCanvas = true;
+          dragCanvasPointerId = e.pointerId;
+          baseTransX = transX;
+          baseTransY = transY;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          container.setPointerCapture(e.pointerId);
+        }
+        // Track this pointer’s position
+        pointerPositions[e.pointerId] = { x: e.clientX, y: e.clientY };
+      });
+
+      container.addEventListener('pointermove', e => {
+        if (pinchActive && pinchPointers.length === 2) {
+          // Multi-touch pinch zoom/pan
+          if (pointerPositions[e.pointerId]) {
+            // update this pointer's stored position
+            pointerPositions[e.pointerId].x = e.clientX;
+            pointerPositions[e.pointerId].y = e.clientY;
+          }
+          const [id1, id2] = pinchPointers;
+          const p1 = pointerPositions[id1], p2 = pointerPositions[id2];
+          if (!p1 || !p2) return;
+          const midX = (p1.x + p2.x) / 2;
+          const midY = (p1.y + p2.y) / 2;
+          const dx = p2.x - p1.x;
+          const dy = p2.y - p1.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist === 0) return;
+          // Scale ratio since last event
+          const ratio = dist / lastDist;
+          let newScale = scale * ratio;
+          newScale = Math.max(minScale, Math.min(maxScale, newScale));
+          const actualRatio = newScale / scale;
+          // Adjust translation to zoom around midpoint
+          const newTransX = transX + (1 - actualRatio) * (midX - transX);
+          const newTransY = transY + (1 - actualRatio) * (midY - transY);
+          // Account for midpoint movement (pan)
+          transX = newTransX + (midX - lastMidX);
+          transY = newTransY + (midY - lastMidY);
+          scale = newScale;
+          // Apply transform
+          canvas.style.transform = `scale(${scale}) translate3d(${transX}px, ${transY}px, 0)`;
+          // Update baseline for next move
+          lastMidX = midX;
+          lastMidY = midY;
+          lastDist = dist;
+          e.preventDefault();
+        } else if (draggingTaskId !== null && e.pointerId === dragTaskPointerId) {
+          // Dragging an individual task
+          const pointerX = (e.clientX - transX) / scale;
+          const pointerY = (e.clientY - transY) / scale;
+          const task = tasksData.find(t => t.id === draggingTaskId);
+          // Compute new position
+          let newX = pointerX - dragOffsetX;
+          let newY = pointerY - dragOffsetY;
+          // Clamp within canvas bounds
+          newX = Math.max(0, Math.min(newX, canvasWidth - (task.width || 0)));
+          newY = Math.max(0, Math.min(newY, canvasHeight - (task.height || 0)));
+          // Update data and element
+          task.x = newX;
+          task.y = newY;
+          const elem = canvas.querySelector('[data-id="' + task.id + '"]');
+          if (elem) {
+            elem.style.left = newX + 'px';
+            elem.style.top  = newY + 'px';
+          }
+          // Check if pointer moved enough to be a drag (not a tap)
+          if (!taskMoved) {
+            const moveDX = e.clientX - dragStartPX;
+            const moveDY = e.clientY - dragStartPY;
+            if (Math.hypot(moveDX, moveDY) > 5) {
+              taskMoved = true;
             }
           }
-        } catch (e) {
-          console.error('Failed to parse tasks from localStorage');
+          e.preventDefault();
+        } else if (isDraggingCanvas && e.pointerId === dragCanvasPointerId) {
+          // Panning the entire canvas
+          const dx = e.clientX - dragStartX;
+          const dy = e.clientY - dragStartY;
+          transX = baseTransX + dx;
+          transY = baseTransY + dy;
+          canvas.style.transform = `scale(${scale}) translate3d(${transX}px, ${transY}px, 0)`;
+          e.preventDefault();
         }
-      }
-      renderTasks();
-      // Adjust canvas top margin to accommodate fixed header
-      const topBar = document.getElementById('top-bar');
-      canvas.style.marginTop = topBar.offsetHeight + 'px';
-      window.addEventListener('resize', () => {
-        canvas.style.marginTop = topBar.offsetHeight + 'px';
       });
-    });
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js');
-    }
+
+      container.addEventListener('pointerup', e => {
+        if (pinchActive && pinchPointers.includes(e.pointerId)) {
+          // One touch lifted during pinch
+          pinchPointers = pinchPointers.filter(id => id !== e.pointerId);
+          if (pinchPointers.length < 2) {
+            pinchActive = false;
+            if (pinchPointers.length === 1) {
+              // Continue dragging canvas with remaining finger
+              const remainingId = pinchPointers[0];
+              isDraggingCanvas = true;
+              dragCanvasPointerId = remainingId;
+              dragStartX = pointerPositions[remainingId].x;
+              dragStartY = pointerPositions[remainingId].y;
+              baseTransX = transX;
+              baseTransY = transY;
+            }
+          }
+        }
+        if (e.pointerId === dragTaskPointerId && draggingTaskId !== null) {
+          // Finished dragging a task
+          const taskElem = canvas.querySelector('[data-id="' + draggingTaskId + '"]');
+          if (taskElem) taskElem.style.zIndex = '';  // reset stacking
+          if (!taskMoved) {
+            // Treat as a click -> toggle note
+            if (taskElem) {
+              if (taskElem.classList.contains('expanded')) {
+                taskElem.classList.remove('expanded');
+              } else {
+                const noteDiv = taskElem.querySelector('.task-note');
+                if (noteDiv) {
+                  taskElem.classList.add('expanded');
+                }
+              }
+              // Update stored task height (in case note expanded/collapsed)
+              const tdata = tasksData.find(t => t.id === draggingTaskId);
+              if (tdata) {
+                tdata.height = taskElem.offsetHeight;
+              }
+            }
+          }
+          draggingTaskId = null;
+          dragTaskPointerId = null;
+        }
+        if (e.pointerId === dragCanvasPointerId && isDraggingCanvas) {
+          // Finished panning canvas
+          isDraggingCanvas = false;
+          dragCanvasPointerId = null;
+        }
+        if (container.hasPointerCapture(e.pointerId)) {
+          container.releasePointerCapture(e.pointerId);
+        }
+        delete pointerPositions[e.pointerId];
+      });
+
+      container.addEventListener('pointercancel', e => {
+        // Clean up if pointer is unexpectedly interrupted
+        if (pinchPointers.includes(e.pointerId)) {
+          pinchPointers = pinchPointers.filter(id => id !== e.pointerId);
+          pinchActive = false;
+        }
+        if (e.pointerId === dragTaskPointerId) {
+          draggingTaskId = null;
+          dragTaskPointerId = null;
+        }
+        if (e.pointerId === dragCanvasPointerId) {
+          isDraggingCanvas = false;
+          dragCanvasPointerId = null;
+        }
+        if (container.hasPointerCapture(e.pointerId)) {
+          container.releasePointerCapture(e.pointerId);
+        }
+        delete pointerPositions[e.pointerId];
+      });
+
+      // Enable wheel zoom (for desktop)
+      container.addEventListener('wheel', e => {
+        e.preventDefault();
+        if (e.deltaY === 0) return;
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        let newScale = scale * zoomFactor;
+        newScale = Math.max(minScale, Math.min(maxScale, newScale));
+        const factor = newScale / scale;
+        // Zoom around pointer position
+        const mouseX = e.clientX, mouseY = e.clientY;
+        const contentX = (mouseX - transX) / scale;
+        const contentY = (mouseY - transY) / scale;
+        scale = newScale;
+        transX = mouseX - contentX * scale;
+        transY = mouseY - contentY * scale;
+        canvas.style.transform = `scale(${scale}) translate3d(${transX}px, ${transY}px, 0)`;
+      });
+
+      // Prevent long-press context menu on canvas (for touch devices)
+      window.addEventListener('contextmenu', e => {
+        if (e.target.closest('#canvas')) e.preventDefault();
+      });
+    })();
   </script>
 </body>
 </html>
