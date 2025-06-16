@@ -88,7 +88,6 @@
       if (task.details) {
         const expandBtn = document.createElement('button');
         expandBtn.className = 'expand-btn';
-        expandBtn.textContent = '+';
         el.appendChild(expandBtn);
 
         const details = document.createElement('div');
@@ -103,7 +102,7 @@
       }
 
       const delBtn = document.createElement('button');
-      delBtn.className = 'delete-btn'; delBtn.textContent = '×';
+      delBtn.className = 'delete-btn';
       delBtn.onclick = (e) => {
         e.stopPropagation();
         deletedTasks.push({...task, idx});
