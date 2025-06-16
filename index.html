@@ -7,92 +7,99 @@
   <link rel="manifest" href="manifest.json">
   <style>
     body {
-      font-family:sans-serif;
-      padding:10px;
-      user-select:none;
-      touch-action:manipulation;
+      font-family:sans-serif;padding:10px;
+      user-select:none;touch-action:none;
+      overflow:hidden;
     }
     #tasks {
-      position:relative;
-      width:100%;
-      min-height:400px;
+      position:relative;width:100%;height:90vh;border:1px dashed #ddd;
     }
     .task {
-      position:absolute;
-      padding:5px 8px;
-      border:1px solid #bbb;
-      border-radius:5px;
-      font-size:11px;
-      background-color:#fff;
-      box-shadow:0 1px 3px rgba(0,0,0,0.1);
-      white-space:nowrap;
+      position:absolute;padding:5px 8px;border:1px solid #ccc;
+      border-radius:5px;font-size:11px;background-color:#fff;
+      box-shadow:0 1px 3px rgba(0,0,0,0.1);white-space:nowrap;
       cursor:move;
+      display:inline-block;max-width:120px;min-width:auto;
     }
     .delete-btn {
-      position:absolute;top:-5px;right:-5px;
-      width:16px;height:16px;line-height:14px;
-      background:red;color:white;border-radius:50%;
+      position:absolute;top:-6px;right:-6px;width:16px;height:16px;
+      line-height:14px;background:red;color:white;border-radius:50%;
       font-size:12px;border:none;cursor:pointer;
     }
-    input, button {
+    input,button {
       font-size:12px;padding:6px;margin:5px 0;
     }
   </style>
 </head>
 <body>
   <h3>任务管理PWA</h3>
-
   <input type="text" id="task-input" placeholder="新任务内容">
   <button id="add-btn">添加任务</button>
-
   <div id="tasks"></div>
 
   <script>
-    let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
-
-    function saveTasks() {
-      localStorage.setItem('tasks', JSON.stringify(tasks));
+    let tasks=JSON.parse(localStorage.getItem('tasks'))||[];
+    const container=document.getElementById('tasks');
+    
+    function saveTasks(){
+      localStorage.setItem('tasks',JSON.stringify(tasks));
     }
 
-    function renderTasks() {
-      const container = document.getElementById('tasks');
-      container.innerHTML = '';
-      tasks.forEach((task, index) => {
-        const taskEl = document.createElement('div');
-        taskEl.className = 'task';
-        taskEl.style.left = (task.x || 10 + index*10) + 'px';
-        taskEl.style.top = (task.y || 10 + index*30) + 'px';
-        taskEl.innerText = task.text;
+    function renderTasks(){
+      container.innerHTML='';
+      tasks.forEach((task,index)=>{
+        const el=document.createElement('div');
+        el.className='task';
+        el.innerText=task.text;
+        el.style.left=task.x+'px';
+        el.style.top=task.y+'px';
 
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.innerText = '×';
-        delBtn.onclick = (e) => {
+        const delBtn=document.createElement('button');
+        delBtn.className='delete-btn';
+        delBtn.innerText='×';
+        delBtn.onclick=(e)=>{
           e.stopPropagation();
-          tasks.splice(index,1);
-          saveTasks();
-          renderTasks();
+          tasks.splice(index,1);saveTasks();renderTasks();
         };
+        el.appendChild(delBtn);
+        
+        let offsetX,offsetY,dragging=false;
+        el.addEventListener('touchstart',(e)=>{
+          dragging=true;
+          offsetX=e.touches[0].clientX-el.offsetLeft;
+          offsetY=e.touches[0].clientY-el.offsetTop;
+        });
+        document.addEventListener('touchmove',(e)=>{
+          if(dragging){
+            e.preventDefault();
+            let x=e.touches[0].clientX-offsetX;
+            let y=e.touches[0].clientY-offsetY;
+            el.style.left=x+'px';el.style.top=y+'px';
+          }
+        });
+        document.addEventListener('touchend',(e)=>{
+          if(dragging){
+            dragging=false;
+            task.x=el.offsetLeft;task.y=el.offsetTop;saveTasks();
+          }
+        });
 
-        taskEl.appendChild(delBtn);
-        container.appendChild(taskEl);
+        container.appendChild(el);
       });
     }
 
-    document.getElementById('add-btn').onclick = () => {
-      const input = document.getElementById('task-input');
-      const text = input.value.trim();
-      if (text) {
+    document.getElementById('add-btn').onclick=()=>{
+      const input=document.getElementById('task-input');
+      const text=input.value.trim();
+      if(text){
         tasks.push({text,x:10,y:10});
-        input.value='';
-        saveTasks();
-        renderTasks();
+        input.value='';saveTasks();renderTasks();
       }
     };
 
     renderTasks();
 
-    if ('serviceWorker' in navigator) {
+    if('serviceWorker'in navigator){
       navigator.serviceWorker.register('sw.js');
     }
   </script>
