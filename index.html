@@ -2,40 +2,41 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
   <title>任务管理PWA</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body { font-family:sans-serif; padding:10px; }
+    body {
+      font-family:sans-serif;
+      padding:10px;
+      user-select:none;
+      touch-action:manipulation;
+    }
     #tasks {
-      margin-top:15px;
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
+      position:relative;
+      width:100%;
+      min-height:400px;
     }
     .task {
-      padding:6px 10px;
-      border:1px solid #ccc;
-      border-radius:6px;
-      font-size:12px;
-      background-color:#f9f9f9;
-      position:relative;
-      word-break:break-word;
-      max-width:120px;
-      min-width:60px;
-      flex-grow:1;
-      box-sizing:border-box;
+      position:absolute;
+      padding:5px 8px;
+      border:1px solid #bbb;
+      border-radius:5px;
+      font-size:11px;
+      background-color:#fff;
+      box-shadow:0 1px 3px rgba(0,0,0,0.1);
+      white-space:nowrap;
+      cursor:move;
     }
     .delete-btn {
-      position:absolute; top:2px; right:2px;
-      background:#ff4d4f; color:white; border:none;
-      cursor:pointer; border-radius:50%; width:16px;
-      height:16px; line-height:14px; font-size:12px;
+      position:absolute;top:-5px;right:-5px;
+      width:16px;height:16px;line-height:14px;
+      background:red;color:white;border-radius:50%;
+      font-size:12px;border:none;cursor:pointer;
     }
     input, button {
-      padding:6px; font-size:12px; margin:3px 0;
+      font-size:12px;padding:6px;margin:5px 0;
     }
-    button { cursor:pointer; }
   </style>
 </head>
 <body>
@@ -49,20 +50,27 @@
   <script>
     let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
 
+    function saveTasks() {
+      localStorage.setItem('tasks', JSON.stringify(tasks));
+    }
+
     function renderTasks() {
       const container = document.getElementById('tasks');
       container.innerHTML = '';
       tasks.forEach((task, index) => {
         const taskEl = document.createElement('div');
         taskEl.className = 'task';
-        taskEl.innerText = task;
+        taskEl.style.left = (task.x || 10 + index*10) + 'px';
+        taskEl.style.top = (task.y || 10 + index*30) + 'px';
+        taskEl.innerText = task.text;
 
         const delBtn = document.createElement('button');
         delBtn.className = 'delete-btn';
         delBtn.innerText = '×';
-        delBtn.onclick = () => {
-          tasks.splice(index, 1);
-          localStorage.setItem('tasks', JSON.stringify(tasks));
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          tasks.splice(index,1);
+          saveTasks();
           renderTasks();
         };
 
@@ -73,11 +81,11 @@
 
     document.getElementById('add-btn').onclick = () => {
       const input = document.getElementById('task-input');
-      const task = input.value.trim();
-      if (task) {
-        tasks.push(task);
-        input.value = '';
-        localStorage.setItem('tasks', JSON.stringify(tasks));
+      const text = input.value.trim();
+      if (text) {
+        tasks.push({text,x:10,y:10});
+        input.value='';
+        saveTasks();
         renderTasks();
       }
     };
