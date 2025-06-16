@@ -1,107 +1,134 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-  <title>任务管理PWA</title>
-  <link rel="manifest" href="manifest.json">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task Board</title>
   <style>
     body {
-      font-family:sans-serif;padding:10px;
-      user-select:none;touch-action:none;
-      overflow:hidden;
+      margin: 0;
+      padding: 0;
+      background: #f0f0f0;
     }
-    #tasks {
-      position:relative;width:100%;height:90vh;border:1px dashed #ddd;
+    #board {
+      position: relative;
+      width: 100%;
+      height: 100vh; /* full viewport height as draggable area */
+      background: #e0e0e0;
+      overflow: hidden;
     }
-    .task {
-      position:absolute;padding:5px 8px;border:1px solid #ccc;
-      border-radius:5px;font-size:11px;background-color:#fff;
-      box-shadow:0 1px 3px rgba(0,0,0,0.1);white-space:nowrap;
-      cursor:move;
-      display:inline-block;max-width:120px;min-width:auto;
+    .card {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+      font-size: 16px;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      /* Prevent text selection and default touch actions while dragging */
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      touch-action: none;
+      -webkit-touch-callout: none;
+      cursor: grab;
+      cursor: -webkit-grab;
     }
-    .delete-btn {
-      position:absolute;top:-6px;right:-6px;width:16px;height:16px;
-      line-height:14px;background:red;color:white;border-radius:50%;
-      font-size:12px;border:none;cursor:pointer;
-    }
-    input,button {
-      font-size:12px;padding:6px;margin:5px 0;
+    .card:active {
+      cursor: grabbing;
+      cursor: -webkit-grabbing;
     }
   </style>
 </head>
 <body>
-  <h3>任务管理PWA</h3>
-  <input type="text" id="task-input" placeholder="新任务内容">
-  <button id="add-btn">添加任务</button>
-  <div id="tasks"></div>
-
+  <div id="board">
+    <div class="card" id="task1">Task 1: This is an example task card. It can be dragged around.</div>
+    <div class="card" id="task2">Task 2: Drag me with your finger on a touchscreen!</div>
+    <div class="card" id="task3">Task 3: My position will be saved and restored after reload.</div>
+  </div>
   <script>
-    let tasks=JSON.parse(localStorage.getItem('tasks'))||[];
-    const container=document.getElementById('tasks');
-    
-    function saveTasks(){
-      localStorage.setItem('tasks',JSON.stringify(tasks));
-    }
-
-    function renderTasks(){
-      container.innerHTML='';
-      tasks.forEach((task,index)=>{
-        const el=document.createElement('div');
-        el.className='task';
-        el.innerText=task.text;
-        el.style.left=task.x+'px';
-        el.style.top=task.y+'px';
-
-        const delBtn=document.createElement('button');
-        delBtn.className='delete-btn';
-        delBtn.innerText='×';
-        delBtn.onclick=(e)=>{
-          e.stopPropagation();
-          tasks.splice(index,1);saveTasks();renderTasks();
-        };
-        el.appendChild(delBtn);
-        
-        let offsetX,offsetY,dragging=false;
-        el.addEventListener('touchstart',(e)=>{
-          dragging=true;
-          offsetX=e.touches[0].clientX-el.offsetLeft;
-          offsetY=e.touches[0].clientY-el.offsetTop;
-        });
-        document.addEventListener('touchmove',(e)=>{
-          if(dragging){
-            e.preventDefault();
-            let x=e.touches[0].clientX-offsetX;
-            let y=e.touches[0].clientY-offsetY;
-            el.style.left=x+'px';el.style.top=y+'px';
-          }
-        });
-        document.addEventListener('touchend',(e)=>{
-          if(dragging){
-            dragging=false;
-            task.x=el.offsetLeft;task.y=el.offsetTop;saveTasks();
-          }
-        });
-
-        container.appendChild(el);
+    (function() {
+      const board = document.getElementById('board');
+      const cards = document.querySelectorAll('.card');
+      let dragEl = null;
+      let offsetX = 0, offsetY = 0, containerRect;
+      let zCounter = 0;
+      // Load saved card positions from localStorage
+      const savedPositions = JSON.parse(localStorage.getItem('cardPositions') || '{}');
+      cards.forEach((card, index) => {
+        const id = card.id;
+        if (savedPositions[id]) {
+          // Apply saved position
+          card.style.left = savedPositions[id].left + 'px';
+          card.style.top = savedPositions[id].top + 'px';
+        } else {
+          // Set default initial positions (stacked vertically with spacing)
+          card.style.left = '10px';
+          card.style.top = (10 + index * 120) + 'px';
+        }
       });
-    }
-
-    document.getElementById('add-btn').onclick=()=>{
-      const input=document.getElementById('task-input');
-      const text=input.value.trim();
-      if(text){
-        tasks.push({text,x:10,y:10});
-        input.value='';saveTasks();renderTasks();
+      // Handle drag end: save position and reset state
+      function endDrag() {
+        if (!dragEl) return;
+        // Save final position in localStorage
+        savedPositions[dragEl.id] = {
+          left: parseInt(dragEl.style.left, 10),
+          top: parseInt(dragEl.style.top, 10)
+        };
+        localStorage.setItem('cardPositions', JSON.stringify(savedPositions));
+        dragEl = null;
       }
-    };
+      // Add pointer event listeners for dragging
+      cards.forEach(card => {
+        card.addEventListener('pointerdown', e => {
+          if (dragEl) return;  // already dragging another card
+          dragEl = card;
+          // Raise this card above others
+          zCounter++;
+          dragEl.style.zIndex = zCounter;
+          // Calculate pointer’s offset within the card
+          containerRect = board.getBoundingClientRect();
+          offsetX = e.clientX - containerRect.left - parseFloat(dragEl.style.left);
+          offsetY = e.clientY - containerRect.top - parseFloat(dragEl.style.top);
+          // Capture pointer events to this card
+          dragEl.setPointerCapture(e.pointerId);
+        });
+        card.addEventListener('pointermove', e => {
+          if (!dragEl || dragEl !== card) return;
+          e.preventDefault();  // prevent page scrolling during drag
+          // Compute new position
+          let newLeft = e.clientX - containerRect.left - offsetX;
+          let newTop  = e.clientY - containerRect.top - offsetY;
+          // Constrain within board boundaries
+          const maxX = board.clientWidth  - dragEl.offsetWidth;
+          const maxY = board.clientHeight - dragEl.offsetHeight;
+          if (newLeft < 0) newLeft = 0;
+          if (newLeft > maxX) newLeft = maxX;
+          if (newTop < 0) newTop = 0;
+          if (newTop > maxY) newTop = maxY;
+          // Apply translated position
+          dragEl.style.left = newLeft + 'px';
+          dragEl.style.top  = newTop  + 'px';
+        });
+        card.addEventListener('pointerup', e => {
+          if (!dragEl || dragEl !== card) return;
+          dragEl.releasePointerCapture(e.pointerId);
+          endDrag();
+        });
+        card.addEventListener('pointercancel', e => {
+          if (!dragEl || dragEl !== card) return;
+          dragEl.releasePointerCapture(e.pointerId);
+          endDrag();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
 
-    renderTasks();
-
-    if('serviceWorker'in navigator){
-      navigator.serviceWorker.register('sw.js');
-    }
   </script>
 </body>
 </html>
