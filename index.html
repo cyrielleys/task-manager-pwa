@@ -16,11 +16,21 @@
       overflow: hidden;
     }
     .task {
-      position: absolute; padding: 10px; border: 1px solid #ccc;
-      border-radius: 8px; background-color: #fff; font-size: 12px;
-      width: 80px; height: 160px; word-wrap: break-word;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1); touch-action: none;
-      user-select: none;
+      position: absolute; padding: 8px; border: 1px solid #ccc;
+      border-radius: 8px; background-color: #fff; font-size: 14px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      touch-action: none; user-select: none;
+      white-space: pre-wrap; word-break: break-word;
+      min-width: 30px; max-width: 160px;
+      display: inline-block;
+    }
+    .task.short {
+      white-space: nowrap;
+      width: auto;
+    }
+    .task.long {
+      white-space: pre-wrap;
+      width: 80px;
     }
     .delete-btn {
       position: absolute; top: -8px; right: -8px;
@@ -28,9 +38,18 @@
       width: 16px; height: 16px; border-radius: 50%;
       cursor: pointer; font-size: 12px;
     }
+    .expand-btn {
+      position: absolute; top: -8px; left: -8px;
+      background-color: #007bff; color: white; border: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      cursor: pointer; font-size: 12px;
+    }
+    .details {
+      display: none; margin-top: 4px; font-size: 12px; color: #666;
+    }
     #undo-btn {
       position: fixed; top: 10px; right: 10px;
-      display: none; padding: 5px 10px; font-size: 12px;
+      display: none; padding: 5px 10px; font-size: 14px;
       z-index: 100; background-color: #007bff;
       color: white; border: none; border-radius: 4px;
     }
@@ -38,14 +57,15 @@
       position: fixed; top: 10px; left: 10px; z-index: 100;
       display: flex; flex-direction: column;
     }
-    input, button { margin: 2px; padding: 5px; font-size: 12px; }
+    input, button { margin: 2px; padding: 5px; font-size: 14px; }
   </style>
 </head>
 <body>
 
 <button id="undo-btn">撤销删除</button>
 <div id="controls">
-  <input type="text" id="task-input" placeholder="新任务内容">
+  <input type="text" id="task-input" placeholder="任务标题">
+  <input type="text" id="details-input" placeholder="任务详情（可选）">
   <button id="add-btn">添加任务</button>
 </div>
 <div id="canvas"></div>
@@ -67,7 +87,33 @@
       el.className = 'task';
       el.style.left = task.x + 'px';
       el.style.top = task.y + 'px';
-      el.textContent = task.text;
+
+      const title = document.createElement('div');
+      title.textContent = task.text;
+      el.appendChild(title);
+
+      if ([...task.text].reduce((len, c) => len + (c.match(/[^\x00-\xff]/) ? 2 : 1), 0) <= 10) {
+        el.classList.add('short');
+      } else {
+        el.classList.add('long');
+      }
+
+      if (task.details) {
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'expand-btn';
+        expandBtn.textContent = '+';
+        el.appendChild(expandBtn);
+
+        const details = document.createElement('div');
+        details.className = 'details';
+        details.textContent = task.details;
+        el.appendChild(details);
+
+        expandBtn.onclick = (e) => {
+          e.stopPropagation();
+          details.style.display = details.style.display === 'none' ? 'block' : 'none';
+        };
+      }
 
       const delBtn = document.createElement('button');
       delBtn.className = 'delete-btn'; delBtn.textContent = '×';
@@ -112,10 +158,11 @@
   };
 
   document.getElementById('add-btn').onclick = () => {
-    const input = document.getElementById('task-input');
-    if (input.value.trim()) {
-      tasks.push({ text: input.value.trim(), x: 20, y: 20 });
-      input.value = ''; saveTasks(); renderTasks();
+    const titleInput = document.getElementById('task-input');
+    const detailsInput = document.getElementById('details-input');
+    if (titleInput.value.trim()) {
+      tasks.push({ text: titleInput.value.trim(), details: detailsInput.value.trim(), x: 20, y: 20 });
+      titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
   };
 
