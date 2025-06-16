@@ -17,7 +17,7 @@
     #tasks {
       position: relative;
       width: 100%;
-      height: 90vh;
+      height: 85vh;
       border: 1px dashed #ddd;
     }
     .task {
@@ -32,7 +32,6 @@
       max-width: 150px;
       cursor: move;
       touch-action: none;
-      -webkit-user-select: none;
       user-select: none;
     }
     .delete-btn {
@@ -55,17 +54,24 @@
       padding: 6px;
       margin: 5px 0;
     }
+    #undo-btn {
+      margin-top: 5px;
+      display: none;
+    }
   </style>
 </head>
 <body>
   <h3>任务管理PWA</h3>
   <input type="text" id="task-input" placeholder="新任务内容">
   <button id="add-btn">添加任务</button>
+  <button id="undo-btn">撤销删除</button>
   <div id="tasks"></div>
 
   <script>
     let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+    let lastDeletedTask = null;
     const container = document.getElementById('tasks');
+    const undoBtn = document.getElementById('undo-btn');
 
     function saveTasks(){
       localStorage.setItem('tasks', JSON.stringify(tasks));
@@ -85,9 +91,11 @@
         delBtn.innerText = '×';
         delBtn.onclick = (e)=>{
           e.stopPropagation();
+          lastDeletedTask = {...task, index};
           tasks.splice(index,1);
           saveTasks();
           renderTasks();
+          undoBtn.style.display = 'inline-block';
         };
         el.appendChild(delBtn);
 
@@ -137,6 +145,16 @@
         input.value='';
         saveTasks();
         renderTasks();
+      }
+    };
+
+    undoBtn.onclick = ()=>{
+      if(lastDeletedTask){
+        tasks.splice(lastDeletedTask.index, 0, lastDeletedTask);
+        saveTasks();
+        renderTasks();
+        lastDeletedTask = null;
+        undoBtn.style.display = 'none';
       }
     };
 
