@@ -40,12 +40,14 @@
     .details {
       display: none; margin-top: 4px; font-size: 12px; color: #666;
     }
-    #undo-btn {
+    #undo-btn, #export-btn, #import-btn {
       position: fixed; top: 10px; right: 10px;
-      display: none; padding: 5px 10px; font-size: 14px;
+      padding: 5px 10px; font-size: 14px;
       z-index: 100; background-color: #007bff;
       color: white; border: none; border-radius: 4px;
+      margin-left: 5px;
     }
+    #undo-btn { right: 150px; display: none; }
     #controls {
       position: fixed; top: 10px; left: 10px; z-index: 100;
       display: flex; flex-direction: column;
@@ -56,6 +58,8 @@
 <body>
 
 <button id="undo-btn">撤销删除</button>
+<button id="export-btn">导出</button>
+<button id="import-btn">导入</button>
 <div id="controls">
   <input type="text" id="task-input" placeholder="新任务内容">
   <input type="text" id="details-input" placeholder="新备注内容（可选）">
@@ -156,6 +160,17 @@
       });
       titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
     }
+  };
+
+  document.getElementById('export-btn').onclick = () => {
+    navigator.clipboard.writeText(JSON.stringify(tasks)).then(() => alert('任务已导出到剪贴板！'));
+  };
+
+  document.getElementById('import-btn').onclick = async () => {
+    const data = await navigator.clipboard.readText();
+    tasks = JSON.parse(data);
+    saveTasks(); renderTasks();
+    alert('任务已从剪贴板导入！');
   };
 
   let canvasOffset = {x:0,y:0}, canvasDrag=false, startDrag;
