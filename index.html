@@ -6,25 +6,42 @@
   <title>任务管理PWA</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body { font-family:sans-serif; padding:20px; }
-    #tasks { margin-top:20px; }
+    body { font-family:sans-serif; padding:10px; }
+    #tasks {
+      margin-top:15px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
     .task {
-      padding:10px;
-      border:1px solid #ddd;
-      margin-bottom:8px;
+      padding:6px 10px;
+      border:1px solid #ccc;
+      border-radius:6px;
+      font-size:12px;
+      background-color:#f9f9f9;
       position:relative;
+      word-break:break-word;
+      max-width:120px;
+      min-width:60px;
+      flex-grow:1;
+      box-sizing:border-box;
     }
     .delete-btn {
-      position:absolute; right:8px; top:8px;
-      background:red; color:white; border:none; cursor:pointer;
-      border-radius:50%; width:20px; height:20px; line-height:18px;
+      position:absolute; top:2px; right:2px;
+      background:#ff4d4f; color:white; border:none;
+      cursor:pointer; border-radius:50%; width:16px;
+      height:16px; line-height:14px; font-size:12px;
     }
+    input, button {
+      padding:6px; font-size:12px; margin:3px 0;
+    }
+    button { cursor:pointer; }
   </style>
 </head>
 <body>
-  <h2>任务管理PWA</h2>
+  <h3>任务管理PWA</h3>
 
-  <input type="text" id="task-input" placeholder="输入新任务">
+  <input type="text" id="task-input" placeholder="新任务内容">
   <button id="add-btn">添加任务</button>
 
   <div id="tasks"></div>
@@ -33,13 +50,13 @@
     let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
 
     function renderTasks() {
-      const taskContainer = document.getElementById('tasks');
-      taskContainer.innerHTML = '';
+      const container = document.getElementById('tasks');
+      container.innerHTML = '';
       tasks.forEach((task, index) => {
         const taskEl = document.createElement('div');
         taskEl.className = 'task';
         taskEl.innerText = task;
-        
+
         const delBtn = document.createElement('button');
         delBtn.className = 'delete-btn';
         delBtn.innerText = '×';
@@ -50,7 +67,7 @@
         };
 
         taskEl.appendChild(delBtn);
-        taskContainer.appendChild(taskEl);
+        container.appendChild(taskEl);
       });
     }
 
