@@ -1,541 +1,529 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Task Board</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>任务管理</title>
   <style>
     html, body {
-      margin: 0; padding: 0;
-      width: 100%; height: 100%;
-      overflow: hidden;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    body {
       background: #fff;
     }
-    #topbar {
-      position: fixed; top: 0; left: 0; width: 100%;
-      background: #f9f9f9; border-bottom: 1px solid #ccc;
-      padding: 5px; box-sizing: border-box;
-      z-index: 1000;
-      display: flex; align-items: center;
+    * {
+      box-sizing: border-box;
     }
-    #taskInput {
-      flex: 1; padding: 6px;
-      font-size: 14px; box-sizing: border-box;
+    /* 顶部固定输入栏样式 */
+    #topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #f0f0f0;
+      border-bottom: 1px solid #ccc;
+      padding: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      z-index: 1000;
+    }
+    #topbar input {
+      height: 30px;
+      line-height: 30px;
+      padding: 0 6px;
+      margin-right: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    #topbar input#noteInput {
+      width: 200px;
+    }
+    #topbar input#titleInput {
+      width: 150px;
     }
     #topbar button {
-      margin-left: 5px; padding: 6px 10px;
-      font-size: 14px; cursor: pointer;
+      height: 30px;
+      line-height: 30px;
+      padding: 0 10px;
+      margin-right: 6px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #eee;
+      font-size: 14px;
+      cursor: pointer;
     }
-    #canvas-container {
-      position: fixed; left: 0; right: 0; bottom: 0;
-      /* top is set via script to the #topbar height */
-      overflow: hidden; background: #eee;
+    #topbar button:hover:enabled {
+      background: #ddd;
     }
+    #topbar button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    /* 画布容器样式 */
     #canvas {
-      position: absolute; top: 0; left: 0;
-      width: 600vw; height: 200vh;
-      transform-origin: 0 0;
-      touch-action: none;        /* Disable browser touch panning/zoom on canvas:contentReference[oaicite:3]{index=3} */
-      will-change: transform;    /* Hint for smoother GPU-accelerated transforms */
-      -webkit-transform: translateZ(0);
-              transform: translateZ(0);  /* Use GPU layer to prevent Safari flicker */
+      position: absolute;
+      top: 50px; /* 顶部栏高度 */
+      bottom: 0;
+      left: 0;
+      right: 0;
+      overflow: hidden;
+      background: #fafafa;
     }
+    /* 任务画布（内部可拖动区域）样式 */
+    #board {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 3000px;
+      height: 2000px;
+      min-width: 100%;
+      min-height: 100%;
+      /* 使用 transform 平移整个画布实现拖动 */
+      touch-action: none; /* 禁用触摸默认滚动行为，确保移动平滑 */
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* 任务卡片样式 */
     .task {
       position: absolute;
-      min-width: 100px; max-width: 300px;
-      padding: 5px;
-      background: #ffffe0;  /* light yellow background for tasks */
-      border: 1px solid #ccc; border-radius: 4px;
-      box-shadow: 1px 1px 5px rgba(0,0,0,0.15);
+      min-width: 100px;
+      max-width: 200px;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #ffffe0; /* 浅黄色背景 */
       cursor: grab;
-      touch-action: none;
       user-select: none;
+      -webkit-user-select: none;
     }
-    .task:active { cursor: grabbing; }
-    .task-note {
-      display: none;
-      margin-top: 4px;
-      font-size: 90%; color: #333;
+    .task .title {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .task .note {
+      font-size: 13px;
       white-space: pre-wrap;
+      word-wrap: break-word;
     }
-    .task.expanded .task-note { display: block; }
-    .delete-btn {
-      position: absolute; top: 2px; right: 4px;
-      padding: 0 4px;
-      border: none; background: transparent;
-      font-size: 14px; font-weight: bold; color: #888;
-      cursor: pointer; user-select: none;
+    .task .delete-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 16px;
+      height: 16px;
+      line-height: 14px;
+      text-align: center;
+      border: none;
+      background: #ccc;
+      color: #333;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0;
+    }
+    .task .delete-btn:hover {
+      background: #aaa;
     }
   </style>
 </head>
 <body>
-  <!-- Top fixed control bar -->
+  <!-- 顶部输入栏：任务标题和备注输入框，以及操作按钮 -->
   <div id="topbar">
-    <input type="text" id="taskInput" placeholder="Add a task..." />
-    <button id="addBtn">Add</button>
-    <button id="undoBtn" disabled>Undo</button>
-    <button id="exportBtn">Export</button>
-    <button id="importBtn">Import</button>
+    <input type="text" id="titleInput" placeholder="任务标题">
+    <input type="text" id="noteInput" placeholder="备注">
+    <button id="addBtn">添加任务</button>
+    <button id="undoBtn">撤销删除</button>
+    <button id="importBtn">导入任务</button>
+    <button id="exportBtn">导出任务</button>
   </div>
-  <!-- Canvas container (scrollable area) -->
-  <div id="canvas-container">
-    <div id="canvas"><!-- Task boxes will be appended here --></div>
+  <!-- 画布区域 -->
+  <div id="canvas">
+    <div id="board"></div>
   </div>
-  <!-- Hidden file input for Import -->
-  <input type="file" id="fileInput" accept=".json" style="display:none;" />
+  <!-- 文件选择输入，用于导入任务 -->
+  <input type="file" id="fileInput" accept=".json" style="display: none;">
+  
   <script>
-    (() => {
-      const topbar = document.getElementById('topbar');
-      const container = document.getElementById('canvas-container');
-      const canvas   = document.getElementById('canvas');
-      const taskInput = document.getElementById('taskInput');
-      const addBtn   = document.getElementById('addBtn');
-      const undoBtn  = document.getElementById('undoBtn');
-      const exportBtn= document.getElementById('exportBtn');
-      const importBtn= document.getElementById('importBtn');
-      const fileInput= document.getElementById('fileInput');
-
-      // Adjust canvas-container top offset to leave room for the fixed topbar
-      function resizeCanvasContainer() {
-        container.style.top = topbar.offsetHeight + 'px';
-      }
-      resizeCanvasContainer();
-      window.addEventListener('resize', resizeCanvasContainer);
-
-      // Data structures
-      let tasksData = [];
-      let idCounter = 0;
-      let lastDeleted = null;
-
-      // Canvas transform state
-      let transX = 0, transY = 0, scale = 1;
-      const minScale = 0.5, maxScale = 3;
-
-      // Drag/zoom state
-      let isDraggingCanvas = false;
-      let dragCanvasPointerId = null;
-      let baseTransX = 0, baseTransY = 0;
-      let dragStartX = 0, dragStartY = 0;
-      let draggingTaskId = null;
-      let dragTaskPointerId = null;
-      let dragOffsetX = 0, dragOffsetY = 0;
-      let dragStartPX = 0, dragStartPY = 0;
-      let taskMoved = false;
-      let pinchActive = false;
-      let pinchPointers = [];
-      let lastMidX = 0, lastMidY = 0;
-      let lastDist = 0;
-      const pointerPositions = {};
-
-      // Canvas dimensions (px in content coords)
-      const canvasWidth  = canvas.offsetWidth;
-      const canvasHeight = canvas.offsetHeight;
-
-      // Helper: create a task element and append to canvas
-      function createTaskElement(task) {
-        const el = document.createElement('div');
-        el.className = 'task';
-        el.setAttribute('data-id', task.id);
-        el.textContent = task.text;
-        if (task.note && task.note !== '') {
-          // Add note sub-element if note text exists
-          const noteDiv = document.createElement('div');
-          noteDiv.className = 'task-note';
-          noteDiv.textContent = task.note;
-          el.appendChild(noteDiv);
-        }
-        // Delete button
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.textContent = '×';
-        // Prevent triggering drag events when touching the delete button
-        delBtn.addEventListener('pointerdown', ev => ev.stopPropagation());
-        el.appendChild(delBtn);
-        // Position the task box
-        el.style.left = task.x + 'px';
-        el.style.top  = task.y + 'px';
-        canvas.appendChild(el);
-        return el;
-      }
-
-      // Add a new task from the input text
-      function addTask(text) {
-        if (!text) return;
-        const task = { id: ++idCounter, text: text, note: '' };
-        // Measure the task's size by creating a temporary hidden element
-        const temp = document.createElement('div');
-        temp.className = 'task';
-        temp.style.visibility = 'hidden';
-        temp.textContent = text;
-        canvas.appendChild(temp);
-        const newWidth  = temp.offsetWidth;
-        const newHeight = temp.offsetHeight;
-        canvas.removeChild(temp);
-        // Determine initial position (center of current view)
-        const viewRect = container.getBoundingClientRect();
-        const visibleLeft = Math.max(0, -transX / scale);
-        const visibleTop  = Math.max(0, -transY / scale);
-        const visibleWidth  = viewRect.width / scale;
-        const visibleHeight = viewRect.height / scale;
-        let posX = visibleLeft + visibleWidth/2 - newWidth/2;
-        let posY = visibleTop  + visibleHeight/2 - newHeight/2;
-        // Clamp inside canvas
-        posX = Math.max(0, Math.min(posX, canvasWidth - newWidth));
-        posY = Math.max(0, Math.min(posY, canvasHeight - newHeight));
-        // Avoid overlapping existing tasks
-        let tries = 0;
-        while (tries < 50) {
+    // 全局数据结构
+    const tasksData = [];  // 存储任务的数组，每项包含{id, title, note, x, y, width, height, element}
+    let nextTaskId = 1;
+    const deletedStack = []; // 删除任务栈，用于撤销删除
+    // 拖拽相关状态
+    let offsetX = 0, offsetY = 0; // 画布平移偏移
+    let isDraggingBoard = false;
+    let draggingTaskElem = null;
+    let dragTaskData = null;
+    let dragOffsetX = 0, dragOffsetY = 0;
+    let lastPointerX = 0, lastPointerY = 0;
+    let activePointerId = null;
+    
+    // 获取主要DOM元素
+    const titleInput = document.getElementById('titleInput');
+    const noteInput = document.getElementById('noteInput');
+    const addBtn = document.getElementById('addBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const importBtn = document.getElementById('importBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const fileInput = document.getElementById('fileInput');
+    const board = document.getElementById('board');
+    const canvas = document.getElementById('canvas');
+    
+    // 初始化撤销删除按钮为禁用
+    undoBtn.disabled = true;
+    
+    // 计算画布有效宽高（考虑固定大小和当前可视区域）
+    function getBoardWidth() {
+      return Math.max(board.offsetWidth, canvas.clientWidth);
+    }
+    function getBoardHeight() {
+      return Math.max(board.offsetHeight, canvas.clientHeight);
+    }
+    
+    // 查找新任务卡片可放置的空闲位置（避免与现有任务重叠）
+    function findFreePosition(newWidth, newHeight) {
+      const gap = 10;
+      const boardW = getBoardWidth();
+      const boardH = getBoardHeight();
+      for (let y = 0; y <= boardH - newHeight; y += 10) {
+        for (let x = 0; x <= boardW - newWidth; x += 10) {
           let overlap = false;
-          for (const t of tasksData) {
-            const tRight = t.x + (t.width || 0);
-            const tBottom = t.y + (t.height || 0);
-            if (posX < tRight && posX + newWidth > t.x && posY < tBottom && posY + newHeight > t.y) {
+          for (const task of tasksData) {
+            if (!(x + newWidth + gap <= task.x || x >= task.x + task.width + gap ||
+                  y + newHeight + gap <= task.y || y >= task.y + task.height + gap)) {
               overlap = true;
               break;
             }
           }
-          if (!overlap) break;
-          posX += 30;
-          posY += 30;
-          if (posX + newWidth > canvasWidth) posX = 0;
-          if (posY + newHeight > canvasHeight) posY = 0;
-          tries++;
+          if (!overlap) {
+            return { x, y };
+          }
         }
-        task.x = posX;
-        task.y = posY;
-        task.width  = newWidth;
-        task.height = newHeight;
-        tasksData.push(task);
-        createTaskElement(task);
       }
-
-      // Undo last deleted task
-      function undoDelete() {
-        if (!lastDeleted) return;
-        const task = lastDeleted;
-        lastDeleted = null;
-        task.id = ++idCounter;  // assign new ID
-        tasksData.push(task);
-        createTaskElement(task);
+      return { x: 0, y: 0 };
+    }
+    
+    // 创建并添加一个任务元素到画布，返回其元素和尺寸
+    function createTaskElement(id, title, note, x, y) {
+      const taskElem = document.createElement('div');
+      taskElem.className = 'task';
+      taskElem.setAttribute('data-id', id);
+      // 标题和备注内容
+      const titleDiv = document.createElement('div');
+      titleDiv.className = 'title';
+      titleDiv.textContent = title;
+      taskElem.appendChild(titleDiv);
+      const noteDiv = document.createElement('div');
+      noteDiv.className = 'note';
+      noteDiv.textContent = note;
+      taskElem.appendChild(noteDiv);
+      // 删除按钮
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '×';
+      taskElem.appendChild(delBtn);
+      // 设置初始位置并插入到DOM（先隐藏测量尺寸）
+      taskElem.style.left = x + 'px';
+      taskElem.style.top = y + 'px';
+      taskElem.style.visibility = 'hidden';
+      board.appendChild(taskElem);
+      // 测量元素尺寸
+      const rect = taskElem.getBoundingClientRect();
+      const taskWidth = rect.width;
+      const taskHeight = rect.height;
+      // 显示元素
+      taskElem.style.visibility = 'visible';
+      return { element: taskElem, width: taskWidth, height: taskHeight };
+    }
+    
+    // 从输入框添加新任务
+    function addTaskFromInput() {
+      const title = titleInput.value.trim();
+      const note = noteInput.value.trim();
+      if (!title) {
+        alert('请输入任务标题');
+        return;
+      }
+      // 创建临时任务元素来获取其尺寸
+      const temp = createTaskElement('temp', title, note, 0, 0);
+      const w = temp.width;
+      const h = temp.height;
+      board.removeChild(temp.element);
+      // 寻找空闲位置
+      const pos = findFreePosition(w, h);
+      const id = nextTaskId++;
+      // 创建实际任务元素
+      const task = createTaskElement(id, title, note, pos.x, pos.y);
+      // 保存任务数据
+      tasksData.push({ id: id, title: title, note: note, x: pos.x, y: pos.y, width: task.width, height: task.height, element: task.element });
+      // 清空输入框
+      titleInput.value = '';
+      noteInput.value = '';
+    }
+    
+    // 删除任务
+    function deleteTask(taskElem) {
+      const id = parseInt(taskElem.getAttribute('data-id'));
+      const index = tasksData.findIndex(t => t.id === id);
+      if (index !== -1) {
+        const removed = tasksData.splice(index, 1)[0];
+        board.removeChild(taskElem);
+        deletedStack.push(removed);
+        undoBtn.disabled = false;
+      }
+    }
+    
+    // 撤销删除任务
+    function undoDelete() {
+      if (deletedStack.length === 0) return;
+      const taskData = deletedStack.pop();
+      // 重新插入任务元素
+      board.appendChild(taskData.element);
+      taskData.element.style.left = taskData.x + 'px';
+      taskData.element.style.top = taskData.y + 'px';
+      // 恢复任务数据
+      tasksData.push(taskData);
+      if (deletedStack.length === 0) {
         undoBtn.disabled = true;
       }
-
-      // Export tasks to JSON file
-      function exportTasks() {
-        const data = tasksData.map(({ id, width, height, ...rest }) => rest);
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'tasks.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+    }
+    
+    // 导出任务列表为JSON文件
+    function exportTasks() {
+      const data = tasksData.map(t => ({ title: t.title, note: t.note, x: t.x, y: t.y }));
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'tasks.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    
+    // 导入任务列表
+    function importTasks(taskList) {
+      // 清除当前任务
+      for (const task of tasksData) {
+        if (task.element && task.element.parentNode) {
+          board.removeChild(task.element);
+        }
       }
-
-      // Import tasks from uploaded JSON text
-      function importTasks(jsonText) {
-        let imported = [];
+      tasksData.length = 0;
+      deletedStack.length = 0;
+      undoBtn.disabled = true;
+      nextTaskId = 1;
+      // 添加导入的任务
+      for (const item of taskList) {
+        const title = item.title || '';
+        const note = item.note || '';
+        const x = item.x !== undefined ? item.x : 0;
+        const y = item.y !== undefined ? item.y : 0;
+        const id = nextTaskId++;
+        const task = createTaskElement(id, title, note, x, y);
+        tasksData.push({ id: id, title: title, note: note, x: x, y: y, width: task.width, height: task.height, element: task.element });
+      }
+      // 调整画布尺寸以容纳所有任务
+      let maxX = 0, maxY = 0;
+      for (const t of tasksData) {
+        maxX = Math.max(maxX, t.x + t.width);
+        maxY = Math.max(maxY, t.y + t.height);
+      }
+      const newW = Math.max(board.offsetWidth, canvas.clientWidth, maxX + 50);
+      const newH = Math.max(board.offsetHeight, canvas.clientHeight, maxY + 50);
+      board.style.width = newW + 'px';
+      board.style.height = newH + 'px';
+    }
+    
+    // 按钮事件绑定
+    addBtn.addEventListener('click', addTaskFromInput);
+    undoBtn.addEventListener('click', undoDelete);
+    importBtn.addEventListener('click', () => {
+      if (tasksData.length > 0) {
+        if (!confirm('导入任务将替换当前任务列表，确定继续？')) {
+          return;
+        }
+      }
+      fileInput.value = '';
+      fileInput.click();
+    });
+    exportBtn.addEventListener('click', exportTasks);
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
         try {
-          const data = JSON.parse(jsonText);
-          imported = Array.isArray(data) ? data : (data.tasks || []);
-        } catch (e) {
-          alert('Invalid task file format!');
+          const data = JSON.parse(reader.result);
+          if (Array.isArray(data)) {
+            importTasks(data);
+            alert(`已导入${data.length}个任务`);
+          } else {
+            alert('文件格式错误，导入失败');
+          }
+        } catch {
+          alert('解析文件时出错，导入失败');
+        }
+      };
+      reader.onerror = () => {
+        alert('读取文件失败');
+      };
+      reader.readAsText(file);
+    });
+    
+    // 画布和任务拖拽
+    // 指针/鼠标按下
+    function onPointerDown(e) {
+      if (activePointerId !== null) return;
+      activePointerId = (e.pointerId !== undefined ? e.pointerId : 'mouse');
+      e.preventDefault();
+      const taskElem = e.target.closest('.task');
+      if (taskElem) {
+        // 点击了任务卡片
+        if (e.target.classList.contains('delete-btn')) {
+          // 如果点击的是删除按钮，不启动拖拽
+          activePointerId = null;
           return;
         }
-        // Remove existing tasks from canvas
-        for (const t of tasksData) {
-          const el = canvas.querySelector('[data-id="' + t.id + '"]');
-          if (el) canvas.removeChild(el);
+        // 准备拖动任务
+        draggingTaskElem = taskElem;
+        const id = parseInt(taskElem.getAttribute('data-id'));
+        dragTaskData = tasksData.find(t => t.id === id);
+        // 计算指针与任务左上角的偏移
+        const canvasRect = canvas.getBoundingClientRect();
+        const pointerBoardX = e.clientX - canvasRect.left - offsetX;
+        const pointerBoardY = e.clientY - canvasRect.top - offsetY;
+        dragOffsetX = pointerBoardX - dragTaskData.x;
+        dragOffsetY = pointerBoardY - dragTaskData.y;
+        // 改变光标样式
+        taskElem.style.cursor = 'grabbing';
+      } else {
+        // 准备拖动画布
+        isDraggingBoard = true;
+        lastPointerX = e.clientX;
+        lastPointerY = e.clientY;
+        board.style.cursor = 'grabbing';
+      }
+      // 捕获指针以跟踪拖拽
+      if (window.PointerEvent && e.pointerId !== undefined) {
+        board.setPointerCapture(e.pointerId);
+      }
+    }
+    // 指针/鼠标移动
+    function onPointerMove(e) {
+      if (activePointerId === null) return;
+      if (e.pointerId !== undefined && e.pointerId !== activePointerId) return;
+      e.preventDefault();
+      if (draggingTaskElem) {
+        // 拖动任务元素
+        const canvasRect = canvas.getBoundingClientRect();
+        const pointerBoardX = e.clientX - canvasRect.left - offsetX;
+        const pointerBoardY = e.clientY - canvasRect.top - offsetY;
+        let newX = pointerBoardX - dragOffsetX;
+        let newY = pointerBoardY - dragOffsetY;
+        // 限制任务在画布内
+        const boardW = getBoardWidth();
+        const boardH = getBoardHeight();
+        if (newX < 0) newX = 0;
+        if (newY < 0) newY = 0;
+        if (newX + dragTaskData.width > boardW) {
+          newX = boardW - dragTaskData.width;
         }
-        tasksData = [];
-        lastDeleted = null;
-        undoBtn.disabled = true;
-        // Add imported tasks
-        for (const t of imported) {
-          const task = {
-            id: ++idCounter,
-            text: t.text || '', 
-            note: t.note || '',
-            x: Math.max(0, Math.min(t.x || 0, canvasWidth - 1)),
-            y: Math.max(0, Math.min(t.y || 0, canvasHeight - 1))
-          };
-          tasksData.push(task);
-          const el = createTaskElement(task);
-          // Store element’s size for future placement calculations
-          task.width  = el.offsetWidth;
-          task.height = el.offsetHeight;
+        if (newY + dragTaskData.height > boardH) {
+          newY = boardH - dragTaskData.height;
+        }
+        draggingTaskElem.style.left = newX + 'px';
+        draggingTaskElem.style.top = newY + 'px';
+        // 更新任务数据
+        dragTaskData.x = newX;
+        dragTaskData.y = newY;
+      } else if (isDraggingBoard) {
+        // 拖动整个画布
+        const dx = e.clientX - lastPointerX;
+        const dy = e.clientY - lastPointerY;
+        lastPointerX = e.clientX;
+        lastPointerY = e.clientY;
+        offsetX += dx;
+        offsetY += dy;
+        board.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+      }
+    }
+    // 指针/鼠标释放
+    function onPointerUp(e) {
+      if (activePointerId === null) return;
+      if (e.pointerId !== undefined && e.pointerId !== activePointerId) return;
+      e.preventDefault();
+      if (draggingTaskElem) {
+        draggingTaskElem.style.cursor = 'grab';
+      }
+      if (isDraggingBoard) {
+        board.style.cursor = 'grab';
+      }
+      // 释放指针捕获
+      if (window.PointerEvent && e.pointerId !== undefined) {
+        try { board.releasePointerCapture(e.pointerId); } catch {}
+      }
+      // 重置状态
+      isDraggingBoard = false;
+      draggingTaskElem = null;
+      dragTaskData = null;
+      activePointerId = null;
+    }
+    
+    // 初始化光标样式
+    board.style.cursor = 'grab';
+    
+    // 注册拖拽事件监听
+    if (window.PointerEvent) {
+      board.addEventListener('pointerdown', onPointerDown);
+      board.addEventListener('pointermove', onPointerMove);
+      board.addEventListener('pointerup', onPointerUp);
+      board.addEventListener('pointercancel', onPointerUp);
+    } else {
+      // 鼠标事件
+      board.addEventListener('mousedown', e => {
+        onPointerDown(e);
+        document.addEventListener('mousemove', onPointerMove);
+        document.addEventListener('mouseup', onPointerUp);
+      });
+      // 触摸事件
+      const onTouchMove = evt => {
+        if (evt.touches.length > 0) {
+          onPointerMove(evt.touches[0]);
+        }
+      };
+      const onTouchEnd = evt => {
+        onPointerUp(evt.changedTouches[0] || {});
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+        document.removeEventListener('touchcancel', onTouchEnd);
+      };
+      board.addEventListener('touchstart', e => {
+        if (e.touches.length > 0) {
+          onPointerDown(e.touches[0]);
+          document.addEventListener('touchmove', onTouchMove);
+          document.addEventListener('touchend', onTouchEnd);
+          document.addEventListener('touchcancel', onTouchEnd);
+        }
+      });
+    }
+    
+    // 删除按钮点击事件委托
+    board.addEventListener('click', e => {
+      if (e.target.classList.contains('delete-btn')) {
+        const taskElem = e.target.closest('.task');
+        if (taskElem) {
+          deleteTask(taskElem);
         }
       }
-
-      // Topbar button event handlers
-      addBtn.addEventListener('click', () => {
-        addTask(taskInput.value.trim());
-        taskInput.value = '';
-      });
-      taskInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          addTask(taskInput.value.trim());
-          taskInput.value = '';
-        }
-      });
-      undoBtn.addEventListener('click', undoDelete);
-      exportBtn.addEventListener('click', exportTasks);
-      importBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', () => {
-        const file = fileInput.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = e => { importTasks(e.target.result); };
-        reader.readAsText(file);
-        fileInput.value = '';  // reset input
-      });
-
-      // Delegate click on delete buttons to handle task deletion
-      container.addEventListener('click', e => {
-        if (e.target.classList.contains('delete-btn')) {
-          const taskElem = e.target.closest('.task');
-          if (!taskElem) return;
-          const taskId = Number(taskElem.getAttribute('data-id'));
-          const idx = tasksData.findIndex(t => t.id === taskId);
-          if (idx >= 0) {
-            lastDeleted = tasksData[idx];
-            tasksData.splice(idx, 1);
-          }
-          canvas.removeChild(taskElem);
-          undoBtn.disabled = !lastDeleted;
-        }
-      });
-
-      // Pointer events for dragging and zooming
-      container.addEventListener('pointerdown', e => {
-        if (e.button !== undefined && e.button !== 0) return;  // only handle primary pointer
-        // If a second finger touches during canvas drag -> start pinch zoom
-        if (!pinchActive && isDraggingCanvas && dragCanvasPointerId && e.pointerId !== dragCanvasPointerId) {
-          pinchActive = true;
-          pinchPointers = [dragCanvasPointerId, e.pointerId];
-          pointerPositions[e.pointerId] = { x: e.clientX, y: e.clientY };
-          const p1 = pointerPositions[pinchPointers[0]];
-          const p2 = pointerPositions[pinchPointers[1]];
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-          lastDist = Math.hypot(dx, dy);
-          lastMidX = (p1.x + p2.x) / 2;
-          lastMidY = (p1.y + p2.y) / 2;
-          // End single-finger panning
-          isDraggingCanvas = false;
-          dragCanvasPointerId = null;
-          return;
-        }
-        // If already dragging a task, ignore additional pointers
-        if (draggingTaskId !== null && e.pointerId !== dragTaskPointerId) {
-          return;
-        }
-        const target = e.target;
-        const taskElem = target.closest('.task');
-        if (taskElem && taskElem.parentElement === canvas) {
-          // Begin dragging a task box
-          draggingTaskId = Number(taskElem.getAttribute('data-id'));
-          dragTaskPointerId = e.pointerId;
-          // Bring task to front
-          taskElem.style.zIndex = '500';
-          // Calculate pointer offset within the task (in content coordinates)
-          const pointerX = (e.clientX - transX) / scale;
-          const pointerY = (e.clientY - transY) / scale;
-          const task = tasksData.find(t => t.id === draggingTaskId);
-          dragOffsetX = pointerX - task.x;
-          dragOffsetY = pointerY - task.y;
-          dragStartPX = e.clientX;
-          dragStartPY = e.clientY;
-          taskMoved = false;
-          container.setPointerCapture(e.pointerId);
-        } else {
-          // Begin dragging (panning) the whole canvas
-          isDraggingCanvas = true;
-          dragCanvasPointerId = e.pointerId;
-          baseTransX = transX;
-          baseTransY = transY;
-          dragStartX = e.clientX;
-          dragStartY = e.clientY;
-          container.setPointerCapture(e.pointerId);
-        }
-        // Track this pointer’s position
-        pointerPositions[e.pointerId] = { x: e.clientX, y: e.clientY };
-      });
-
-      container.addEventListener('pointermove', e => {
-        if (pinchActive && pinchPointers.length === 2) {
-          // Multi-touch pinch zoom/pan
-          if (pointerPositions[e.pointerId]) {
-            // update this pointer's stored position
-            pointerPositions[e.pointerId].x = e.clientX;
-            pointerPositions[e.pointerId].y = e.clientY;
-          }
-          const [id1, id2] = pinchPointers;
-          const p1 = pointerPositions[id1], p2 = pointerPositions[id2];
-          if (!p1 || !p2) return;
-          const midX = (p1.x + p2.x) / 2;
-          const midY = (p1.y + p2.y) / 2;
-          const dx = p2.x - p1.x;
-          const dy = p2.y - p1.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist === 0) return;
-          // Scale ratio since last event
-          const ratio = dist / lastDist;
-          let newScale = scale * ratio;
-          newScale = Math.max(minScale, Math.min(maxScale, newScale));
-          const actualRatio = newScale / scale;
-          // Adjust translation to zoom around midpoint
-          const newTransX = transX + (1 - actualRatio) * (midX - transX);
-          const newTransY = transY + (1 - actualRatio) * (midY - transY);
-          // Account for midpoint movement (pan)
-          transX = newTransX + (midX - lastMidX);
-          transY = newTransY + (midY - lastMidY);
-          scale = newScale;
-          // Apply transform
-          canvas.style.transform = `scale(${scale}) translate3d(${transX}px, ${transY}px, 0)`;
-          // Update baseline for next move
-          lastMidX = midX;
-          lastMidY = midY;
-          lastDist = dist;
-          e.preventDefault();
-        } else if (draggingTaskId !== null && e.pointerId === dragTaskPointerId) {
-          // Dragging an individual task
-          const pointerX = (e.clientX - transX) / scale;
-          const pointerY = (e.clientY - transY) / scale;
-          const task = tasksData.find(t => t.id === draggingTaskId);
-          // Compute new position
-          let newX = pointerX - dragOffsetX;
-          let newY = pointerY - dragOffsetY;
-          // Clamp within canvas bounds
-          newX = Math.max(0, Math.min(newX, canvasWidth - (task.width || 0)));
-          newY = Math.max(0, Math.min(newY, canvasHeight - (task.height || 0)));
-          // Update data and element
-          task.x = newX;
-          task.y = newY;
-          const elem = canvas.querySelector('[data-id="' + task.id + '"]');
-          if (elem) {
-            elem.style.left = newX + 'px';
-            elem.style.top  = newY + 'px';
-          }
-          // Check if pointer moved enough to be a drag (not a tap)
-          if (!taskMoved) {
-            const moveDX = e.clientX - dragStartPX;
-            const moveDY = e.clientY - dragStartPY;
-            if (Math.hypot(moveDX, moveDY) > 5) {
-              taskMoved = true;
-            }
-          }
-          e.preventDefault();
-        } else if (isDraggingCanvas && e.pointerId === dragCanvasPointerId) {
-          // Panning the entire canvas
-          const dx = e.clientX - dragStartX;
-          const dy = e.clientY - dragStartY;
-          transX = baseTransX + dx;
-          transY = baseTransY + dy;
-          canvas.style.transform = `scale(${scale}) translate3d(${transX}px, ${transY}px, 0)`;
-          e.preventDefault();
-        }
-      });
-
-      container.addEventListener('pointerup', e => {
-        if (pinchActive && pinchPointers.includes(e.pointerId)) {
-          // One touch lifted during pinch
-          pinchPointers = pinchPointers.filter(id => id !== e.pointerId);
-          if (pinchPointers.length < 2) {
-            pinchActive = false;
-            if (pinchPointers.length === 1) {
-              // Continue dragging canvas with remaining finger
-              const remainingId = pinchPointers[0];
-              isDraggingCanvas = true;
-              dragCanvasPointerId = remainingId;
-              dragStartX = pointerPositions[remainingId].x;
-              dragStartY = pointerPositions[remainingId].y;
-              baseTransX = transX;
-              baseTransY = transY;
-            }
-          }
-        }
-        if (e.pointerId === dragTaskPointerId && draggingTaskId !== null) {
-          // Finished dragging a task
-          const taskElem = canvas.querySelector('[data-id="' + draggingTaskId + '"]');
-          if (taskElem) taskElem.style.zIndex = '';  // reset stacking
-          if (!taskMoved) {
-            // Treat as a click -> toggle note
-            if (taskElem) {
-              if (taskElem.classList.contains('expanded')) {
-                taskElem.classList.remove('expanded');
-              } else {
-                const noteDiv = taskElem.querySelector('.task-note');
-                if (noteDiv) {
-                  taskElem.classList.add('expanded');
-                }
-              }
-              // Update stored task height (in case note expanded/collapsed)
-              const tdata = tasksData.find(t => t.id === draggingTaskId);
-              if (tdata) {
-                tdata.height = taskElem.offsetHeight;
-              }
-            }
-          }
-          draggingTaskId = null;
-          dragTaskPointerId = null;
-        }
-        if (e.pointerId === dragCanvasPointerId && isDraggingCanvas) {
-          // Finished panning canvas
-          isDraggingCanvas = false;
-          dragCanvasPointerId = null;
-        }
-        if (container.hasPointerCapture(e.pointerId)) {
-          container.releasePointerCapture(e.pointerId);
-        }
-        delete pointerPositions[e.pointerId];
-      });
-
-      container.addEventListener('pointercancel', e => {
-        // Clean up if pointer is unexpectedly interrupted
-        if (pinchPointers.includes(e.pointerId)) {
-          pinchPointers = pinchPointers.filter(id => id !== e.pointerId);
-          pinchActive = false;
-        }
-        if (e.pointerId === dragTaskPointerId) {
-          draggingTaskId = null;
-          dragTaskPointerId = null;
-        }
-        if (e.pointerId === dragCanvasPointerId) {
-          isDraggingCanvas = false;
-          dragCanvasPointerId = null;
-        }
-        if (container.hasPointerCapture(e.pointerId)) {
-          container.releasePointerCapture(e.pointerId);
-        }
-        delete pointerPositions[e.pointerId];
-      });
-
-      // Enable wheel zoom (for desktop)
-      container.addEventListener('wheel', e => {
-        e.preventDefault();
-        if (e.deltaY === 0) return;
-        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-        let newScale = scale * zoomFactor;
-        newScale = Math.max(minScale, Math.min(maxScale, newScale));
-        const factor = newScale / scale;
-        // Zoom around pointer position
-        const mouseX = e.clientX, mouseY = e.clientY;
-        const contentX = (mouseX - transX) / scale;
-        const contentY = (mouseY - transY) / scale;
-        scale = newScale;
-        transX = mouseX - contentX * scale;
-        transY = mouseY - contentY * scale;
-        canvas.style.transform = `scale(${scale}) translate3d(${transX}px, ${transY}px, 0)`;
-      });
-
-      // Prevent long-press context menu on canvas (for touch devices)
-      window.addEventListener('contextmenu', e => {
-        if (e.target.closest('#canvas')) e.preventDefault();
-      });
-    })();
+    });
   </script>
 </body>
 </html>
