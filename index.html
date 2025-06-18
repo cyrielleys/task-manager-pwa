@@ -2,328 +2,164 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>任务管理PWA</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    body {
-      margin: 0; padding: 10px;
-      background-color: #222;
-      background-image: linear-gradient(45deg, #444 25%, transparent 25%),
-                        linear-gradient(135deg, #444 25%, transparent 25%),
-                        linear-gradient(45deg, transparent 75%, #444 75%),
-                        linear-gradient(135deg, transparent 75%, #444 75%);
-      background-size: 20px 20px;
-      background-position: 0 0, 10px 0, 10px -10px, 0px 10px;
-      color: #eee;
-      font-family: sans-serif;
+    body, html {
+      margin: 0; padding: 0; overflow: hidden; font-family: sans-serif;
     }
-    #input-container {
-      width: 100%;
-      max-width: 300px;
-      margin: 0 auto 10px;
-    }
-    #input-container input {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 8px;
-      margin: 5px 0;
-      border: 1px solid #777;
-      border-radius: 4px;
-      background: #555;
-      color: #eee;
-    }
-    #input-container input::placeholder { color: #aaa; }
-    #top-buttons {
-      display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-bottom: 10px;
-    }
-    #top-buttons button {
-      background: #555;
-      color: #eee;
-      border: 1px solid #777;
-      border-radius: 4px;
-      padding: 8px 12px;
-      margin: 5px 3px;
-      cursor: pointer;
-    }
-    #top-buttons button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #top-buttons button:hover:enabled { background: #666; }
     #canvas {
-      position: relative;
-      width: 100%;
-      min-height: 80vh;
-      border: 1px solid #555;
+      width: 300vw; height: 200vh;
+      position: relative; background-color: #f0f0f0;
+      touch-action: none;
+      overflow: hidden;
     }
-    .task-card {
-      position: absolute;
-      padding: 10px;
-      border-radius: 5px;
-      background: #fff;
-      color: #000;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-      min-width: 100px;
-      max-width: 200px;
-      user-select: none;
-    }
-    .task-title { font-weight: bold; }
-    .task-note {
-      margin-top: 5px;
-      font-size: 0.9em;
-      line-height: 1.2em;
-      background: #f0f0f0;
-      padding: 5px;
-      border-radius: 3px;
+    .task {
+      position: absolute; padding: 8px; border: 1px solid #ccc;
+      border-radius: 8px; background-color: #fff; font-size: 14px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      touch-action: none; user-select: none;
+      white-space: pre-wrap; word-break: break-word;
+      max-width: 160px;
+      display: inline-block;
     }
     .delete-btn {
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      background: none;
-      border: none;
-      color: #f00;
-      font-size: 16px;
-      line-height: 1;
-      cursor: pointer;
+      position: absolute; top: -8px; right: -8px;
+      background-color: red; color: white; border: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      cursor: pointer; font-size: 12px;
     }
+    .expand-btn {
+      position: absolute; top: -8px; left: -8px;
+      background-color: #007bff; color: white; border: none;
+      width: 16px; height: 16px; border-radius: 50%;
+      cursor: pointer; font-size: 12px;
+    }
+    .details {
+      display: none; margin-top: 4px; font-size: 12px; color: #666;
+    }
+    #undo-btn {
+      position: fixed; top: 10px; right: 10px;
+      display: none; padding: 5px 10px; font-size: 14px;
+      z-index: 100; background-color: #007bff;
+      color: white; border: none; border-radius: 4px;
+    }
+    #controls {
+      position: fixed; top: 10px; left: 10px; z-index: 100;
+      display: flex; flex-direction: column;
+    }
+    input, button { margin: 2px; padding: 5px; font-size: 14px; }
   </style>
 </head>
 <body>
-  <div id="input-container">
-    <input type="text" id="taskTitle" placeholder="新任务标题">
-    <input type="text" id="taskNote" placeholder="新备注内容 (可选)">
-  </div>
-  <div id="top-buttons">
-    <button id="addTask" disabled>添加任务</button>
-    <button id="import">导入</button>
-    <button id="export">导出</button>
-    <button id="undo">撤销</button>
-  </div>
-  <div id="canvas"></div>
-  <script>
-    // 任务数据和历史记录
-    let tasks = [];
-    let historyStack = [];
-    let nextId = 1;
-    const canvas = document.getElementById('canvas');
-    const titleInput = document.getElementById('taskTitle');
-    const noteInput = document.getElementById('taskNote');
-    const addBtn = document.getElementById('addTask');
-    const importBtn = document.getElementById('import');
-    const exportBtn = document.getElementById('export');
-    const undoBtn = document.getElementById('undo');
-    // 调整输入框容器宽度以适配屏幕但不超过按钮区域宽度
-    function adjustInputWidth() {
-      const btnBarWidth = document.getElementById('top-buttons').offsetWidth;
-      const inputCont = document.getElementById('input-container');
-      inputCont.style.maxWidth = btnBarWidth + 'px';
-    }
-    window.addEventListener('load', adjustInputWidth);
-    window.addEventListener('resize', adjustInputWidth);
-    // 根据标题输入启用/禁用添加任务按钮
-    function updateAddButton() {
-      addBtn.disabled = titleInput.value.trim() === "";
-    }
-    titleInput.addEventListener('input', updateAddButton);
-    noteInput.addEventListener('input', updateAddButton);
-    // 添加任务
-    addBtn.addEventListener('click', () => {
-      const title = titleInput.value.trim();
-      const note = noteInput.value.trim();
-      if (!title) return;
-      addTask(title, note);
-      titleInput.value = "";
-      noteInput.value = "";
-      updateAddButton();
-    });
-    function addTask(title, note) {
-      const task = { id: nextId++, title: title, note: note, x: 50, y: 50 };
-      tasks.push(task);
-      renderTask(task);
-      historyStack.push({ type: 'add', task: task });
-    }
-    function renderTask(task) {
-      const card = document.createElement('div');
-      card.className = 'task-card';
-      card.dataset.id = task.id;
-      card.style.left = task.x + 'px';
-      card.style.top = task.y + 'px';
-      // 任务标题
-      const titleEl = document.createElement('div');
-      titleEl.className = 'task-title';
-      titleEl.textContent = task.title;
-      card.appendChild(titleEl);
-      // 任务备注（隐藏）
-      if (task.note && task.note.trim() !== "") {
-        const noteEl = document.createElement('div');
-        noteEl.className = 'task-note';
-        noteEl.textContent = task.note;
-        noteEl.style.display = 'none';
-        card.appendChild(noteEl);
+
+<button id="undo-btn">撤销删除</button>
+<div id="controls">
+  <input type="text" id="task-input" placeholder="新任务内容">
+  <input type="text" id="details-input" placeholder="新备注内容（可选）">
+  <button id="add-btn">添加任务</button>
+</div>
+<div id="canvas"></div>
+
+<script>
+  let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+  let deletedTask = null;
+  const canvas = document.getElementById('canvas');
+  const undoBtn = document.getElementById('undo-btn');
+
+  function saveTasks() {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+  }
+
+  function renderTasks() {
+    canvas.innerHTML = '';
+    tasks.forEach((task, idx) => {
+      const el = document.createElement('div');
+      el.className = 'task';
+      el.style.left = task.x + 'px';
+      el.style.top = task.y + 'px';
+
+      const title = document.createElement('div');
+      title.textContent = task.text;
+      el.appendChild(title);
+
+      if (task.details) {
+        const expandBtn = document.createElement('button');
+        expandBtn.className = 'expand-btn';
+        expandBtn.textContent = '+';
+        el.appendChild(expandBtn);
+
+        const details = document.createElement('div');
+        details.className = 'details';
+        details.textContent = task.details;
+        el.appendChild(details);
+
+        expandBtn.onclick = (e) => {
+          e.stopPropagation();
+          details.style.display = details.style.display === 'none' ? 'block' : 'none';
+        };
       }
-      // 删除按钮
+
       const delBtn = document.createElement('button');
-      delBtn.className = 'delete-btn';
-      delBtn.textContent = '×';
-      card.appendChild(delBtn);
-      // 删除任务事件
-      delBtn.addEventListener('click', () => {
-        const id = task.id;
-        // 从任务列表移除
-        tasks = tasks.filter(t => t.id !== id);
-        // 从画布移除元素
-        canvas.removeChild(card);
-        // 保存删除操作到历史记录
-        historyStack.push({ type: 'delete', task: task });
-      });
-      // 使卡片可拖拽并支持点击展开备注
-      makeDraggable(card, task);
-      canvas.appendChild(card);
-    }
-    function makeDraggable(card, task) {
-      let startX, startY;
-      card.addEventListener('pointerdown', (e) => {
-        if (e.target.classList.contains('delete-btn')) return;
-        e.preventDefault();
-        startX = e.clientX;
-        startY = e.clientY;
-        card.setPointerCapture(e.pointerId);
-        card.onpointermove = (ev) => {
-          card.style.left = (card.offsetLeft + ev.movementX) + 'px';
-          card.style.top = (card.offsetTop + ev.movementY) + 'px';
-        };
-      });
-      card.addEventListener('pointerup', (e) => {
-        card.onpointermove = null;
-        card.releasePointerCapture(e.pointerId);
-        // 如果指针几乎没有移动，则作为单击切换备注显示
-        if (Math.abs(e.clientX - startX) < 3 && Math.abs(e.clientY - startY) < 3) {
-          const noteEl = card.querySelector('.task-note');
-          if (noteEl) {
-            noteEl.style.display = (noteEl.style.display === 'none') ? 'block' : 'none';
-          }
-        } else {
-          // 拖拽结束，更新任务位置并保存操作
-          const newX = card.offsetLeft;
-          const newY = card.offsetTop;
-          historyStack.push({ type: 'move', id: task.id, oldX: task.x, oldY: task.y, newX: newX, newY: newY });
-          task.x = newX;
-          task.y = newY;
-        }
-      });
-      card.addEventListener('pointercancel', (e) => {
-        card.onpointermove = null;
-        card.releasePointerCapture(e.pointerId);
-      });
-    }
-    // 从 JSON 文件导入任务
-    importBtn.addEventListener('click', () => {
-      const fileInput = document.createElement('input');
-      fileInput.type = 'file';
-      fileInput.accept = 'application/json';
-      fileInput.onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const importedTasks = JSON.parse(event.target.result);
-            if (Array.isArray(importedTasks)) {
-              // 清空当前任务
-              canvas.innerHTML = "";
-              tasks = [];
-              historyStack = [];
-              nextId = 1;
-              for (const t of importedTasks) {
-                const title = t.title || "（无标题）";
-                const note = t.note || "";
-                const x = (typeof t.x === "number") ? t.x : 50;
-                const y = (typeof t.y === "number") ? t.y : 50;
-                const task = { id: nextId++, title: title, note: note, x: x, y: y };
-                tasks.push(task);
-                renderTask(task);
-              }
-            } else {
-              alert("导入的文件格式不正确！");
-            }
-          } catch (err) {
-            alert("导入失败: " + err);
-          }
-        };
-        reader.readAsText(file);
+      delBtn.className = 'delete-btn'; delBtn.textContent = '×';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deletedTask = {...task, idx};
+        tasks.splice(idx, 1);
+        saveTasks(); renderTasks();
+        undoBtn.style.display = 'block';
       };
-      fileInput.click();
-    });
-    // 导出任务到 JSON 文件
-    exportBtn.addEventListener('click', () => {
-      const dataStr = JSON.stringify(tasks);
-      const blob = new Blob([dataStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'tasks.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
-    // 撤销上一次操作
-    undoBtn.addEventListener('click', () => {
-      const action = historyStack.pop();
-      if (!action) return;
-      if (action.type === 'add') {
-        // 移除刚添加的任务
-        const id = action.task.id;
-        const card = canvas.querySelector(\`.task-card[data-id='\${id}']\`);
-        if (card) canvas.removeChild(card);
-        tasks = tasks.filter(t => t.id !== id);
-      } else if (action.type === 'delete') {
-        // 重新添加最近删除的任务
-        const t = action.task;
-        if (t.id >= nextId) {
-          nextId = t.id + 1;
+      el.appendChild(delBtn);
+
+      let offsetX, offsetY, dragging;
+      el.onpointerdown = e => {
+        dragging = el; el.setPointerCapture(e.pointerId);
+        offsetX = e.clientX - el.offsetLeft;
+        offsetY = e.clientY - el.offsetTop;
+      };
+      el.onpointermove = e => {
+        if (dragging !== el) return;
+        el.style.left = (e.clientX - offsetX) + 'px';
+        el.style.top = (e.clientY - offsetY) + 'px';
+      };
+      el.onpointerup = el.onpointercancel = () => {
+        if (dragging === el) {
+          dragging = null;
+          task.x = el.offsetLeft; task.y = el.offsetTop;
+          saveTasks();
         }
-        tasks.push(t);
-        renderTask(t);
-      } else if (action.type === 'move') {
-        // 将任务移动回之前位置
-        const task = tasks.find(t => t.id === action.id);
-        if (task) {
-          task.x = action.oldX;
-          task.y = action.oldY;
-          const card = canvas.querySelector(\`.task-card[data-id='\${task.id}']\`);
-          if (card) {
-            card.style.left = task.x + 'px';
-            card.style.top = task.y + 'px';
-          }
-        }
-      }
+      };
+      canvas.appendChild(el);
     });
-    // 允许按回车键快速添加任务
-    titleInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        addBtn.click();
-      }
-    });
-    noteInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        addBtn.click();
-      }
-    });
-    // 注册 ServiceWorker 用于 PWA
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').then(() => {
-        console.log('ServiceWorker 注册成功');
-      });
+  }
+
+  undoBtn.onclick = () => {
+    if (deletedTask) {
+      tasks.splice(deletedTask.idx, 0, deletedTask);
+      saveTasks(); renderTasks();
+      undoBtn.style.display = 'none';
+      deletedTask = null;
     }
-  </script>
+  };
+
+  document.getElementById('add-btn').onclick = () => {
+    const titleInput = document.getElementById('task-input');
+    const detailsInput = document.getElementById('details-input');
+    if (titleInput.value.trim()) {
+      tasks.push({
+        text: titleInput.value.trim(),
+        details: detailsInput.value.trim(),
+        x: 50 + tasks.length * 10,
+        y: 80 + tasks.length * 10
+      });
+      titleInput.value = ''; detailsInput.value = ''; saveTasks(); renderTasks();
+    }
+  };
+
+  renderTasks();
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
 </body>
 </html>
